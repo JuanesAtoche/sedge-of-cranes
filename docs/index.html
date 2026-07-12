@@ -3,37 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Title is set from strings.js at load time -->
   <title>Sedge of Cranes</title>
   <link rel="stylesheet" href="css/style.css" />
+  <!--
+    AR libraries, pinned versions (verified on npm):
+    - A-Frame 1.5.0  (pinned to 1.5.x: the newest version MindAR 1.2.5 is documented against)
+    - MindAR  1.2.5  (latest)
+    Lazy-loading these after the landing screen is a Phase 4 task.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-v1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 </head>
 <body>
 
   <!-- ============ STATE: landing ============ -->
   <section id="state-landing">
-    <!-- Inline SVG so no extra network request. A stylized folded crane
-         made of triangles, matching the paper-craft theme. -->
     <svg class="crane-emblem" viewBox="0 0 120 100" role="img" aria-label="Origami crane">
-      <polygon points="10,62 48,50 44,78" fill="#d9534a"/>          <!-- tail -->
-      <polygon points="44,78 48,50 78,58 62,84" fill="#b8433c"/>    <!-- body -->
-      <polygon points="48,50 58,12 78,58" fill="#e8776f"/>          <!-- raised wing -->
-      <polygon points="78,58 96,44 104,30 98,44" fill="#d9534a"/>   <!-- neck -->
-      <polygon points="104,30 112,26 104,36" fill="#24435c"/>       <!-- head -->
+      <polygon points="10,62 48,50 44,78" fill="#d9534a"/>
+      <polygon points="44,78 48,50 78,58 62,84" fill="#b8433c"/>
+      <polygon points="48,50 58,12 78,58" fill="#e8776f"/>
+      <polygon points="78,58 96,44 104,30 98,44" fill="#d9534a"/>
+      <polygon points="104,30 112,26 104,36" fill="#24435c"/>
     </svg>
-
     <h1 data-str="appTitle"></h1>
     <p data-str="tagline"></p>
     <button id="btn-start" data-str="startButton"></button>
     <p class="explainer" data-str="cameraExplainer"></p>
-    <!-- Mat PDF link goes live in Phase 1 when the mat exists -->
-  </section>
-
-  <!-- ============ STATE: camera-test (Phase 0 only) ============ -->
-  <section id="state-camera-test" hidden>
-    <h1 data-str="cameraTestTitle"></h1>
-    <video id="camera-preview" autoplay playsinline muted></video>
-    <div><span class="ok-badge" data-str="cameraTestOk"></span></div>
-    <button id="btn-stop" data-str="cameraTestStop"></button>
+    <p><a href="assets/mat.pdf" target="_blank" data-str="matLinkLabel"></a></p>
   </section>
 
   <!-- ============ STATE: denied ============ -->
@@ -48,6 +44,39 @@
     <h1 data-str="unsupportedTitle"></h1>
     <p data-str="unsupportedBody"></p>
   </section>
+
+  <!-- ============ AR VIEW (scanning + experience) ============ -->
+  <div id="ar-container" hidden>
+    <a-scene id="ar-scene"
+      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no"
+      color-space="sRGB"
+      renderer="colorManagement: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false">
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- Everything inside this entity is glued to the mat.
+           Mat coordinate system: mat width = 1 unit, origin at mat center. -->
+      <a-entity id="mat-anchor" mindar-image-target="targetIndex: 0">
+        <!-- Phase 1 proof: a red cube standing on the center circle -->
+        <a-box color="#d34a3e" position="0 0 0.09"
+               scale="0.18 0.18 0.18" rotation="0 0 20"></a-box>
+      </a-entity>
+    </a-scene>
+
+    <!-- overlay: shown while searching for the mat -->
+    <div id="overlay-scanning" class="overlay-card">
+      <img src="assets/mat_thumb.png" alt="" />
+      <p data-str="scanningHint"></p>
+    </div>
+
+    <!-- overlay: shown while the mat is tracked (Phase 1 only) -->
+    <div id="overlay-found" class="overlay-badge" hidden>
+      <span data-str="trackingOk"></span>
+    </div>
+
+    <button id="btn-exit" data-str="exitButton" aria-label="Exit"></button>
+  </div>
 
   <script src="js/strings.js"></script>
   <script src="js/app.js"></script>

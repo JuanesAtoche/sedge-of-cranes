@@ -1,75 +1,104 @@
 /**
  * app.js — the app's state machine.
  *
- * Phase 0 scope: landing → camera-test → (ok | denied | unsupported).
- * In Phase 1 the "camera-test" state is replaced by the real AR
- * scanning state, but the landing / denied / unsupported states stay.
+ * Phase 1 scope:
+ *   landing → (Start) → scanning → mat found → red cube anchored to mat
+ *   plus: denied and unsupported states, exit back to landing.
  *
- * States are just <section> elements in index.html; showState() hides
- * all of them and shows one. No frameworks — this is a static site.
+ * The AR view is #ar-container (camera + 3D scene + overlays). The three
+ * simple screens are <section> elements. MindAR drives targetFound /
+ * targetLost events; we only toggle overlays and (later) audio.
  */
 
-// ---- tiny state machine -------------------------------------------------
+// ---- screens -------------------------------------------------------------
 
-const states = ["landing", "camera-test", "denied", "unsupported"];
+const SECTIONS = ["landing", "denied", "unsupported"];
 
-function showState(name) {
-  states.forEach((s) => {
+function showSection(name) {
+  SECTIONS.forEach((s) => {
     document.getElementById("state-" + s).hidden = s !== name;
   });
+  document.getElementById("ar-container").hidden = name !== null;
+  document.body.classList.toggle("in-ar", name === null);
 }
 
-// ---- fill in all text from strings.js (never hard-coded in HTML) --------
+// ---- strings (never hard-coded in markup) ---------------------------------
 
 function applyStrings() {
-  // Every element with a data-str attribute gets its text from STRINGS.
   document.querySelectorAll("[data-str]").forEach((el) => {
     el.textContent = STRINGS[el.dataset.str] || "⚠ missing string";
   });
   document.title = STRINGS.appTitle;
 }
 
-// ---- Phase 0: camera permission test ------------------------------------
+// ---- AR lifecycle ----------------------------------------------------------
 
-let cameraStream = null;
+let arSystem = null;
 
-async function startCameraTest() {
-  // Unsupported browser? (very old phones, or non-HTTPS pages)
+function sceneReady(scene) {
+  return new Promise((resolve) => {
+    if (scene.hasLoaded) resolve();
+    else scene.addEventListener("loaded", resolve, { once: true });
+  });
+}
+
+async function startAR() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showState("unsupported");
+    showSection("unsupported");
     return;
   }
+  const scene = document.getElementById("ar-scene");
+  showSection(null); // hide sections, show #ar-container
+  document.getElementById("overlay-scanning").hidden = false;
+  document.getElementById("overlay-found").hidden = true;
+
+  await sceneReady(scene);
+  arSystem = scene.systems["mindar-image-system"];
   try {
-    // "environment" = rear camera, the one we'll use for AR.
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
-      audio: false,
-    });
-    const video = document.getElementById("camera-preview");
-    video.srcObject = cameraStream;
-    showState("camera-test");
+    await arSystem.start(); // asks for camera permission on first run
   } catch (err) {
-    // NotAllowedError = user (or browser policy) denied permission.
-    console.warn("Camera error:", err.name);
-    showState("denied");
+    console.warn("AR start failed:", err);
+    stopAR();
+    showSection("denied");
   }
 }
 
-function stopCameraTest() {
-  // Always release the camera when leaving the state (privacy + battery).
-  if (cameraStream) {
-    cameraStream.getTracks().forEach((t) => t.stop());
-    cameraStream = null;
-  }
-  showState("landing");
+function stopAR() {
+  try { if (arSystem) arSystem.stop(); } catch (_) {}
+  // Belt & braces: make sure the camera is truly released (privacy).
+  document.querySelectorAll("#ar-container video").forEach((v) => {
+    if (v.srcObject) v.srcObject.getTracks().forEach((t) => t.stop());
+  });
+  showSection("landing");
 }
 
-// ---- wire up buttons -----------------------------------------------------
+// ---- events ----------------------------------------------------------------
 
 window.addEventListener("DOMContentLoaded", () => {
   applyStrings();
-  document.getElementById("btn-start").addEventListener("click", startCameraTest);
-  document.getElementById("btn-stop").addEventListener("click", stopCameraTest);
-  document.getElementById("btn-retry").addEventListener("click", startCameraTest);
-  showState("landing");
+
+  document.getElementById("btn-start").addEventListener("click", startAR);
+  document.getElementById("btn-retry").addEventListener("click", startAR);
+  document.getElementById("btn-exit").addEventListener("click", stopAR);
+
+  const scene = document.getElementById("ar-scene");
+
+  // Camera permission refused or camera unavailable → denied screen.
+  scene.addEventListener("arError", () => {
+    stopAR();
+    showSection("denied");
+  });
+
+  // Mat tracking events (fired by MindAR on the anchor entity).
+  const anchor = document.getElementById("mat-anchor");
+  anchor.addEventListener("targetFound", () => {
+    document.getElementById("overlay-scanning").hidden = true;
+    document.getElementById("overlay-found").hidden = false;
+  });
+  anchor.addEventListener("targetLost", () => {
+    document.getElementById("overlay-scanning").hidden = false;
+    document.getElementById("overlay-found").hidden = true;
+  });
+
+  showSection("landing");
 });
