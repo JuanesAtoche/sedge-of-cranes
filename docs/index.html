@@ -13,6 +13,7 @@
   -->
   <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-v1.5.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <script src="js/flock.js"></script> <!-- must load before the scene initializes -->
 </head>
 <body>
 
@@ -48,19 +49,22 @@
   <!-- ============ AR VIEW (scanning + experience) ============ -->
   <div id="ar-container" hidden>
     <a-scene id="ar-scene"
-      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no"
+      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001"
       color-space="sRGB"
       renderer="colorManagement: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false">
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+      <!-- spec 5.1: simple ambient + one directional light, no shadows -->
+      <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+      <a-entity light="type: directional; intensity: 0.7" position="0.5 1 2"></a-entity>
+
       <!-- Everything inside this entity is glued to the mat.
            Mat coordinate system: mat width = 1 unit, origin at mat center. -->
       <a-entity id="mat-anchor" mindar-image-target="targetIndex: 0">
-        <!-- Phase 1 proof: a red cube standing on the center circle -->
-        <a-box color="#d34a3e" position="0 0 0.09"
-               scale="0.18 0.18 0.18" rotation="0 0 20"></a-box>
+        <!-- Phase 2: seven cranes in a V formation (see js/flock.js) -->
+        <a-entity flock></a-entity>
       </a-entity>
     </a-scene>
 

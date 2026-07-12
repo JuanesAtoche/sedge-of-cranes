@@ -15,7 +15,7 @@ const STRINGS = {
 
   // Scanning / tracking
   scanningHint: "Point your camera at the story mat",
-  trackingOk: "Found it! The cube is standing on your mat 🎉",
+  trackingOk: "Here comes the flock! 🕊️",
   exitButton: "✕",
 
   // Permission denied

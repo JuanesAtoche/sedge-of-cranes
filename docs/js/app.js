@@ -83,6 +83,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const scene = document.getElementById("ar-scene");
 
+  // Open the URL with ?debug to see an FPS meter (Phase 2 acceptance: ≥24 fps)
+  if (new URLSearchParams(location.search).has("debug")) {
+    scene.setAttribute("stats", "");
+  }
+
   // Camera permission refused or camera unavailable → denied screen.
   scene.addEventListener("arError", () => {
     stopAR();
@@ -91,9 +96,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Mat tracking events (fired by MindAR on the anchor entity).
   const anchor = document.getElementById("mat-anchor");
+  let badgeTimer = null;
   anchor.addEventListener("targetFound", () => {
     document.getElementById("overlay-scanning").hidden = true;
-    document.getElementById("overlay-found").hidden = false;
+    const badge = document.getElementById("overlay-found");
+    badge.hidden = false;                       // greet, then get out of the way
+    clearTimeout(badgeTimer);
+    badgeTimer = setTimeout(() => { badge.hidden = true; }, 2500);
   });
   anchor.addEventListener("targetLost", () => {
     document.getElementById("overlay-scanning").hidden = false;

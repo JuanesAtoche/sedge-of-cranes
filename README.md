@@ -10,9 +10,9 @@ cranes fly around it while a warm voice tells a growth-mindset story.
 - 3D rendering: [A-Frame](https://aframe.io) 1.5.0 (MIT)
 - Hosting: GitHub Pages (free, HTTPS)
 
-> **Build status: Phase 1 — Tracking proof.** The app now recognizes the
-> story mat and anchors a red test cube to it. The crane flock arrives in
-> Phase 2.
+> **Build status: Phase 2 — The flock.** Seven procedural origami cranes
+> fly in a V formation around the mat: orbiting, bobbing, and flapping.
+> Story and narration arrive in Phase 3.
 
 ---
 
@@ -128,11 +128,42 @@ copy the outputs into `docs/assets/`, and **recompile the target** (step
 above) — any pixel change invalidates the old `targets.mind`.
 
 
+---
+
+## Phase 2 notes
+
+**No downloaded 3D model.** The crane is built procedurally from ~30
+triangles in `docs/js/flock.js` (`paper-crane` component). Zero download
+weight, no third-party license, and the wings are separate meshes so they
+flap for real. Colors, sizes, orbit speed, flap rate, and bob height are
+all plain numbers at the top of `flock.js` — tune freely.
+
+**Jitter tuning.** The scene uses MindAR's smoothing filter
+(`filterMinCF: 0.0001; filterBeta: 0.001` on the `<a-scene>` tag) to calm
+the Phase 1 cube jitter. Trade-off: more smoothing = steadier hover but
+slightly "floatier" response when you move the phone fast. If the flock
+lags too much, raise `filterBeta` (try `0.01`, then `0.1`).
+
+### Phase 2 test — on your phone
+
+| Step | What you should see |
+|---|---|
+| Point at the mat | 7 cranes **fade in over ~1.5 s** above the circle |
+| Watch for ~20 s | The V formation completes one slow lap around your paper crane |
+| Look closely | Lead crane: bigger, red, at the apex; each crane flaps at its own rhythm; gentle up-down bobbing |
+| Look away / cover the mat | Flock **freezes instantly**; hint card returns |
+| Point back | Flock resumes mid-motion |
+| Open the URL with `?debug` at the end | FPS meter appears — should stay **≥ 24 fps** |
+
+If FPS is low on an older phone, tell the developer/AI — the throttle plan
+is: disable antialiasing first, then reduce crane count.
+
+
 ## Roadmap
 
 - [x] **Phase 0 — Skeleton:** Pages live, camera permission verified
 - [x] **Phase 1 — Tracking proof:** story mat + a cube anchored to it
-- [ ] **Phase 2 — The flock:** 7 cranes, V formation, orbit, wing flaps
+- [x] **Phase 2 — The flock:** 7 cranes, V formation, orbit, wing flaps
 - [ ] **Phase 3 — Story & audio:** narration, subtitles, 3 synced beats
 - [ ] **Phase 4 — UX polish:** all five UI states, fallbacks
 - [ ] **Phase 5 — Field test:** real mat, real crane, 2+ phones
