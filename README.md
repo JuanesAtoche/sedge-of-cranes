@@ -10,9 +10,11 @@ cranes fly around it while a warm voice tells a growth-mindset story.
 - 3D rendering: [A-Frame](https://aframe.io) 1.5.0 (MIT)
 - Hosting: GitHub Pages (free, HTTPS)
 
-> **Build status: Phase 2 — The flock.** Seven procedural origami cranes
-> fly in a V formation around the mat: orbiting, bobbing, and flapping.
-> Story and narration arrive in Phase 3.
+> **Build status: Phase 3 — Story & audio.** The flock now tells its
+> story: narration with subtitles, pause/resume tied to tracking, and three
+> animation beats synced to the tale. ⚠️ The shipped voice is a ROBOTIC
+> PLACEHOLDER — replace it with a warm human recording (see below) before
+> showing this to children.
 
 ---
 
@@ -159,12 +161,62 @@ If FPS is low on an older phone, tell the developer/AI — the throttle plan
 is: disable antialiasing first, then reduce crane count.
 
 
+---
+
+## Phase 3: the story
+
+### Narration script (60–90 s, growth mindset)
+
+1. High above a quiet pond, seven paper cranes fly together.
+2. Do you see the little red one, right at the front?
+3. Her name is Mika. But she wasn't always the leader.
+4. Mika's very first fold was crooked. Her wings pointed the wrong way, and she wobbled when she flew. *(→ the lead crane wobbles)*
+5. "I can't do it," Mika sighed.
+6. "Not yet," said Grandmother Crane. "Every fold teaches your wings something new."
+7. So Mika practiced. One fold. Then another. Each one a little braver than the last. *(→ the lead crane loops upward)*
+8. Her wobbles turned into swoops. Her swoops turned into loops!
+9. And the other cranes said: "Mika, you fly so well — will you show us the way?"
+10. Now the whole flock flies together, higher than any crane could fly alone. *(→ the flock forms a circle)*
+11. Your crane is part of the flock now.
+12. What will you fold next?
+
+### Replacing the placeholder voice (please do!)
+
+The shipped `narration.mp3` uses espeak-ng, an open-source synthesizer —
+it proves the pipeline but sounds robotic. To replace it:
+
+1. Record the 12 lines above (a parent's voice is perfect; any phone
+   recorder works). Save each line as `line01.wav` … `line12.wav`.
+   You may also generate them once with any TTS tool — that's allowed
+   because it happens offline; the app itself never calls a TTS service.
+2. In a Codespace: put the files in a folder and run
+   `python3 tools/build_narration.py that-folder/` from `docs/assets/`.
+   It concatenates them, writes `narration.mp3`, and regenerates
+   `narration.vtt` with exact timings measured from YOUR recording.
+3. Commit both files. **Beats stay in sync automatically** — they're tied
+   to subtitle cue numbers (4, 7, 10), not to seconds.
+
+### Phase 3 test — on your phone
+
+| Step | What you should see / hear |
+|---|---|
+| Point at the mat | Flock fades in, then a big **▶ Start the story** button |
+| Tap it | Narration plays; subtitles appear at the bottom |
+| At "…she wobbled when she flew" (~15 s) | The red crane wobbles crookedly |
+| At "So Mika practiced…" (~32 s) | The red crane does a full upward loop |
+| At "Now the whole flock flies together…" (~52 s) | The V melts into a circle for ~3 s, then re-forms |
+| Cover the mat mid-story | Audio stops immediately; hint card returns |
+| Point back | Audio resumes exactly where it paused |
+| Story ends | **▶ Play again** button; flock keeps orbiting |
+| 🔇 / 💬 buttons (top-left) | Mute and subtitle toggles work |
+
+
 ## Roadmap
 
 - [x] **Phase 0 — Skeleton:** Pages live, camera permission verified
 - [x] **Phase 1 — Tracking proof:** story mat + a cube anchored to it
 - [x] **Phase 2 — The flock:** 7 cranes, V formation, orbit, wing flaps
-- [ ] **Phase 3 — Story & audio:** narration, subtitles, 3 synced beats
+- [x] **Phase 3 — Story & audio:** narration, subtitles, 3 synced beats
 - [ ] **Phase 4 — UX polish:** all five UI states, fallbacks
 - [ ] **Phase 5 — Field test:** real mat, real crane, 2+ phones
 

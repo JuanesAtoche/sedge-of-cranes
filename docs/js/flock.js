@@ -169,6 +169,14 @@ AFRAME.registerComponent("flock", {
     });
   },
 
+  /**
+   * Trigger a story beat (called from app.js at subtitle cue times):
+   *   "wobble" — the lead crane's first crooked flight (~2.2 s)
+   *   "loop"   — practice pays off: a full upward loop  (~2.6 s)
+   *   "circle" — the whole flock forms a ring           (~3.8 s)
+   */
+  beat(name) { this.effectPending = name; },
+
   tick(t) {
     if (this.paused) return;   // freezes orbit, bob, flap ≤ one frame (spec: 300 ms)
 
@@ -182,10 +190,55 @@ AFRAME.registerComponent("flock", {
     // orbit: one revolution per orbitSeconds
     this.pivot.object3D.rotation.z = (2 * Math.PI * t) / (this.data.orbitSeconds * 1000);
 
-    // per-crane bob + flap
-    this.cranes.forEach((c) => {
-      c.el.object3D.position.z = c.base.z +
+    // ---- story-beat bookkeeping ----
+    const DUR = { wobble: 2.2, loop: 2.6, circle: 3.8 };
+    let fx = null, e = 0;
+    if (this.effectPending) {
+      this.effect = { name: this.effectPending, start: t };
+      this.effectPending = null;
+    }
+    if (this.effect) {
+      e = (t - this.effect.start) / 1000;
+      if (e >= DUR[this.effect.name]) {
+        const lead = this.cranes[0].el.object3D;
+        lead.rotation.x = 0; lead.rotation.z = 0;   // clean up after effects
+        this.effect = null;
+      } else {
+        fx = this.effect.name;
+      }
+    }
+
+    // ---- per-crane position + effects + flap ----
+    this.cranes.forEach((c, i) => {
+      const o = c.el.object3D;
+      let x = c.base.x, y = c.base.y;
+      let z = c.base.z +
         this.data.bobAmp * Math.sin((2 * Math.PI * t) / (this.data.bobSeconds * 1000) + c.bobPhase);
+
+      if (fx === "circle") {
+        // lerp everyone from the V onto a ring, hold, lerp back
+        let k = 1;
+        if (e < 0.7) k = e / 0.7;
+        else if (e > 3.1) k = Math.max(0, (3.8 - e) / 0.7);
+        const a = (i / this.cranes.length) * 2 * Math.PI + Math.PI / 2;
+        const tx = 0.20 * Math.cos(a);
+        const ty = 0.20 * Math.sin(a) - 0.15;
+        x += (tx - x) * k;
+        y += (ty - y) * k;
+      }
+
+      if (i === 0) {  // effects on the lead crane only
+        if (fx === "wobble") {
+          o.rotation.z = 0.5 * Math.sin(e * 13) * (1 - e / 2.2); // crooked roll, easing out
+          x += 0.02 * Math.sin(e * 9);
+        } else if (fx === "loop") {
+          const k = Math.min(1, e / 2.6);
+          o.rotation.x = -2 * Math.PI * k;          // one full vertical loop
+          z += 0.16 * Math.sin(Math.PI * k);        // rise over the top, come back
+        }
+      }
+
+      o.position.set(x, y, z);
       const pc = c.el.components["paper-crane"];
       if (pc) pc.flap(t);
     });

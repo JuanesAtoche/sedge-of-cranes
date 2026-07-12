@@ -74,12 +74,15 @@
       <p data-str="scanningHint"></p>
     </div>
 
-    <!-- overlay: shown while the mat is tracked (Phase 1 only) -->
-    <div id="overlay-found" class="overlay-badge" hidden>
-      <span data-str="trackingOk"></span>
-    </div>
+    <!-- big friendly story button (audio must start from a user tap) -->
+    <button id="btn-story" class="story-btn" hidden></button>
+
+    <!-- narration subtitles (spec 5.2: on by default, toggleable) -->
+    <div id="subtitle-bar" hidden></div>
 
     <button id="btn-exit" data-str="exitButton" aria-label="Exit"></button>
+    <button id="btn-mute" class="chip"></button>
+    <button id="btn-subs" class="chip"></button>
   </div>
 
   <script src="js/strings.js"></script>

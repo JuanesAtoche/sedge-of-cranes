@@ -15,8 +15,14 @@ const STRINGS = {
 
   // Scanning / tracking
   scanningHint: "Point your camera at the story mat",
-  trackingOk: "Here comes the flock! 🕊️",
   exitButton: "✕",
+
+  // Story
+  startStory: "▶  Start the story",
+  playAgain: "▶  Play again",
+  ariaMute: "Mute the story",
+  ariaUnmute: "Unmute the story",
+  ariaSubs: "Subtitles on or off",
 
   // Permission denied
   deniedTitle: "We can't see the mat yet",
