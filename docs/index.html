@@ -4,20 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sedge of Cranes</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=0.4.0" />
   <!--
-    AR libraries, pinned versions (verified on npm):
-    - A-Frame 1.5.0  (pinned to 1.5.x: the newest version MindAR 1.2.5 is documented against)
-    - MindAR  1.2.5  (latest)
-    Lazy-loading these after the landing screen is a Phase 4 task.
+    NOTE (Phase 4): the AR libraries (A-Frame 1.5.0 + MindAR 1.2.5, ~1.5 MB)
+    are now LAZY-LOADED by js/app.js when the user taps Start. The landing
+    page itself is ~50 KB, which keeps cold start fast on 4G (spec §8).
+    Pinned CDN URLs live at the top of js/app.js.
   -->
-  <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-v1.5.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  <script src="js/flock.js"></script> <!-- must load before the scene initializes -->
 </head>
 <body>
 
-  <!-- ============ STATE: landing ============ -->
+  <!-- ============ STATE 1: landing ============ -->
   <section id="state-landing">
     <svg class="crane-emblem" viewBox="0 0 120 100" role="img" aria-label="Origami crane">
       <polygon points="10,62 48,50 44,78" fill="#d9534a"/>
@@ -28,56 +25,54 @@
     </svg>
     <h1 data-str="appTitle"></h1>
     <p data-str="tagline"></p>
+    <p class="warn" id="inapp-warning" hidden data-str="inAppWarning"></p>
     <button id="btn-start" data-str="startButton"></button>
     <p class="explainer" data-str="cameraExplainer"></p>
     <p><a href="assets/mat.pdf" target="_blank" data-str="matLinkLabel"></a></p>
+    <p class="version" id="version-stamp"></p>
   </section>
 
-  <!-- ============ STATE: denied ============ -->
+  <!-- ============ STATE 2: permission denied ============ -->
   <section id="state-denied" hidden>
     <h1 data-str="deniedTitle"></h1>
-    <p data-str="deniedBody"></p>
+    <p id="denied-body"></p>
     <button id="btn-retry" data-str="retryButton"></button>
   </section>
 
-  <!-- ============ STATE: unsupported ============ -->
+  <!-- ============ STATE 5: unsupported / load error (with GIF fallback) ============ -->
   <section id="state-unsupported" hidden>
-    <h1 data-str="unsupportedTitle"></h1>
-    <p data-str="unsupportedBody"></p>
+    <h1 id="unsupported-title"></h1>
+    <p id="unsupported-body"></p>
+    <p class="explainer" data-str="fallbackCaption"></p>
+    <img class="fallback-gif" src="assets/fallback.gif" alt="Animation of seven paper cranes flying over the story mat" loading="lazy" />
   </section>
 
-  <!-- ============ AR VIEW (scanning + experience) ============ -->
+  <!-- ============ STATES 3 & 4: AR (scanning ⇄ experience) ============ -->
   <div id="ar-container" hidden>
-    <a-scene id="ar-scene"
-      mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001"
-      color-space="sRGB"
-      renderer="colorManagement: true"
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: false">
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <!-- The <a-scene> lives in a template: it must not exist in the DOM
+         until A-Frame + MindAR are loaded (lazy). app.js injects it. -->
+    <template id="ar-scene-template">
+      <a-scene id="ar-scene"
+        mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001"
+        color-space="sRGB"
+        renderer="colorManagement: true"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false">
+        <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+        <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+        <a-entity light="type: directional; intensity: 0.7" position="0.5 1 2"></a-entity>
+        <a-entity id="mat-anchor" mindar-image-target="targetIndex: 0">
+          <a-entity flock></a-entity>
+        </a-entity>
+      </a-scene>
+    </template>
 
-      <!-- spec 5.1: simple ambient + one directional light, no shadows -->
-      <a-entity light="type: ambient; intensity: 0.9"></a-entity>
-      <a-entity light="type: directional; intensity: 0.7" position="0.5 1 2"></a-entity>
-
-      <!-- Everything inside this entity is glued to the mat.
-           Mat coordinate system: mat width = 1 unit, origin at mat center. -->
-      <a-entity id="mat-anchor" mindar-image-target="targetIndex: 0">
-        <!-- Phase 2: seven cranes in a V formation (see js/flock.js) -->
-        <a-entity flock></a-entity>
-      </a-entity>
-    </a-scene>
-
-    <!-- overlay: shown while searching for the mat -->
     <div id="overlay-scanning" class="overlay-card">
       <img src="assets/mat_thumb.png" alt="" />
-      <p data-str="scanningHint"></p>
+      <p id="scanning-text"></p>
     </div>
 
-    <!-- big friendly story button (audio must start from a user tap) -->
     <button id="btn-story" class="story-btn" hidden></button>
-
-    <!-- narration subtitles (spec 5.2: on by default, toggleable) -->
     <div id="subtitle-bar" hidden></div>
 
     <button id="btn-exit" data-str="exitButton" aria-label="Exit"></button>
@@ -85,7 +80,7 @@
     <button id="btn-subs" class="chip"></button>
   </div>
 
-  <script src="js/strings.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/strings.js?v=0.4.0"></script>
+  <script src="js/app.js?v=0.4.0"></script>
 </body>
 </html>
