@@ -280,6 +280,11 @@
       'paper_yellow_dots.png'
     ],
 
+    /* Fallback solid colors if a texture fails to load (e.g. a missing PNG
+     * on the server). A crane in plain paper beats a black silhouette. */
+    FALLBACK_COLORS: [0xb33a2e, 0xa8c8dc, 0xecc8cf, 0xc3d8bf,
+                      0xcfc8e4, 0xecd0ba, 0xece0b0],
+
     /* V-formation offsets (formation local, +Z forward, lead at apex). */
     V_OFFSETS: [
       [0.00,  0.000,  0.10],
@@ -360,12 +365,23 @@
       var rand = mulberry32(1000 + i * 77);   // per-crane personality seed
       var jit = 0.008;                        // facet jitter (crane units)
 
-      var tex = loader.load(d.papersPath + this.PAPERS[i % this.PAPERS.length]);
+      var self = this;
+      var mat; // created below; the error callback needs to reference it
+      var tex = loader.load(
+        d.papersPath + this.PAPERS[i % this.PAPERS.length],
+        undefined, undefined,
+        function () { // texture 404 / network error → plain-paper fallback
+          console.warn('[sedge-flock] paper texture missing for crane ' + i +
+            ' — using solid color. Is docs/assets/papers/ deployed?');
+          mat.map = null;
+          mat.color.setHex(self.FALLBACK_COLORS[i % self.FALLBACK_COLORS.length]);
+          mat.needsUpdate = true;
+        });
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(2.4, 2.4);
       tex.offset.set(rand(), rand());         // no two cranes wear it alike
-      var mat = makePaperMaterial(tex);
+      mat = makePaperMaterial(tex);
 
       var unit = new THREE.Group();           // V position + bob
       var off = this.V_OFFSETS[i % this.V_OFFSETS.length];
