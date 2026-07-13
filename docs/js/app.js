@@ -97,9 +97,13 @@ async function loadStory() {
   } catch (e) { console.warn("Subtitles unavailable:", e); }
 }
 
+//modified by JC: function flock() {
+  //const el = document.querySelector("[flock]");
+  //return el && el.components.flock;
+//}
+
 function flock() {
-  const el = document.querySelector("[flock]");
-  return el && el.components.flock;
+  return document.getElementById("flock");
 }
 
 function onTimeUpdate() {
@@ -109,14 +113,27 @@ function onTimeUpdate() {
   bar.textContent = cue ? cue.text : "";
   bar.hidden = !(subsOn && tracked && storyState === "playing" && cue);
 
+  //modified by JC: for (const [num, name] of Object.entries(BEAT_CUES)) {
+    //const c = cues[num - 1];
+    //if (c && t >= c.start && !firedBeats.has(num)) {
+      //firedBeats.add(num);
+      //const fl = flock();
+      //if (fl) fl.beat(name);
+    //}
+  //}
+
   for (const [num, name] of Object.entries(BEAT_CUES)) {
     const c = cues[num - 1];
     if (c && t >= c.start && !firedBeats.has(num)) {
       firedBeats.add(num);
-      const fl = flock();
-      if (fl) fl.beat(name);
+      const flockEl = flock();
+      if (flockEl) {
+        // Map 'circle' to 'finale', otherwise pass the name ('wobble' or 'loop')
+        const beatName = name === 'circle' ? 'finale' : name;
+        flockEl.emit('flock-beat', { name: beatName });
+      }
     }
-  }
+  }  
 }
 
 function startStory() {
