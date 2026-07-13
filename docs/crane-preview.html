@@ -104,8 +104,16 @@
     <!-- THE FLOCK — identical component + defaults as the AR scene -->
     <a-entity id="flock" sedge-flock="autoShow: true; autoTarget: false"></a-entity>
 
-    <a-entity id="rig" position="0 0.26 0.55">
-      <a-camera look-controls="magicWindowTrackingEnabled: false"
+    <!-- Camera rig. Two traps solved here:
+         (1) <a-camera> has a HIDDEN default position of y=1.6 m ("standing
+             person eye height") — we must set position="0 0 0" explicitly
+             or the camera floats far above our miniature scene and frustum
+             culling draws nothing (draw calls = 0).
+         (2) look-controls ignores an initial rotation on the camera entity,
+             so the downward tilt lives on the rig instead. -->
+    <a-entity id="rig" position="0 0.30 0.55" rotation="-20 0 0">
+      <a-camera position="0 0 0"
+                look-controls="magicWindowTrackingEnabled: false"
                 wasd-controls-enabled="false" fov="55"></a-camera>
     </a-entity>
   </a-scene>
