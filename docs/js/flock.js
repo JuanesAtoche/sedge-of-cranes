@@ -38,7 +38,7 @@
     throw new Error('flock.js: A-Frame must be loaded first');
   }
 
-  var VERSION = '0.5.1-dev';   // 0.5.1: kids' field feedback — flock size ×2
+  var VERSION = '0.5.2-dev';   // 0.5.2: bolder washi patterns, tunable tiling
 
   /* ----- deterministic per-crane randomness --------------------------------
    * mulberry32 is a tiny seeded random generator. Seeding by crane index
@@ -269,6 +269,10 @@
                                         // radius and altitude TOGETHER so
                                         // the formation never overlaps.
       wingspan:     { default: 0.11 },  // meters (real-world ≈ 11 cm at size 1)
+      patternRepeat:{ default: 1.0 },   // texture tiles per crane. Lower =
+                                        // bigger, more readable motifs.
+                                        // Was 2.4; kids couldn't see the
+                                        // patterns (texel density lesson).
       orbitRadius:  { default: 0.13 },  // meters from mat/crane center
       altitude:     { default: 0.12 },  // meters above the anchor plane
       orbitSeconds: { default: 20 },    // one full orbit (spec: ≈ 20 s)
@@ -374,7 +378,8 @@
       var self = this;
       var mat; // created below; the error callback needs to reference it
       var tex = loader.load(
-        d.papersPath + this.PAPERS[i % this.PAPERS.length],
+        // ?v= busts the phone's cache when the papers are regenerated
+        d.papersPath + this.PAPERS[i % this.PAPERS.length] + '?v=' + VERSION,
         undefined, undefined,
         function () { // texture 404 / network error → plain-paper fallback
           console.warn('[sedge-flock] paper texture missing for crane ' + i +
@@ -385,7 +390,7 @@
         });
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(2.4, 2.4);
+      tex.repeat.set(d.patternRepeat, d.patternRepeat);
       tex.offset.set(rand(), rand());         // no two cranes wear it alike
       mat = makePaperMaterial(tex);
 
