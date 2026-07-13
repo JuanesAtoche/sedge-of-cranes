@@ -53,7 +53,7 @@
          until A-Frame + MindAR are loaded (lazy). app.js injects it. -->
     <template id="ar-scene-template">
       <a-scene id="ar-scene"
-        mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001"
+        mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; warmupTolerance: 2; missTolerance: 30"
         color-space="sRGB"
         renderer="colorManagement: true"
         vr-mode-ui="enabled: false"
