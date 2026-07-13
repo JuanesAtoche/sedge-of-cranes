@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Flock Preview — Sedge of Cranes</title>
+  <!--
+    crane-preview.html — Phase 6 lab page (not linked from the main app).
+
+    WHY THIS PAGE EXISTS: iterating on how the cranes LOOK is much faster
+    when you don't have to point a phone at a mat every time. This page
+    renders the exact same flock component the AR scene uses, in a plain
+    3D scene. If it looks right and runs at ≥ 24 fps here, it will look
+    right in AR (AR adds the camera feed + tracking cost, which is why we
+    still verify on the mat afterwards).
+
+    Controls: drag to look around · buttons trigger the three story beats
+    and freeze/resume · the HUD shows FPS, draw calls and triangles.
+  -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="js/flock.js"></script>
+  <style>
+    :root {
+      --paper: #fdf9f0;
+      --ink: #3a3128;
+      --red: #b33a2e;
+      --sky-edge: #cfe3ee;
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a-scene { position: fixed; inset: 0; }
+
+    /* header: a little paper tag, like a label tied to a gift */
+    .tag {
+      position: fixed; top: 10px; left: 10px; z-index: 10;
+      background: var(--paper); color: var(--ink);
+      border: 1.5px solid var(--ink); border-radius: 4px 14px 14px 14px;
+      padding: 8px 14px; box-shadow: 2px 3px 0 rgba(58,49,40,.18);
+      max-width: 70vw;
+    }
+    .tag h1 { margin: 0; font-size: 15px; letter-spacing: .02em; }
+    .tag h1 span { color: var(--red); }
+    .tag small { color: #7a6f61; font-size: 11px; }
+
+    /* HUD: performance numbers, top-right */
+    #hud {
+      position: fixed; top: 10px; right: 10px; z-index: 10;
+      background: rgba(58,49,40,.82); color: #fdf9f0;
+      font: 12px/1.5 ui-monospace, Menlo, monospace;
+      padding: 8px 10px; border-radius: 10px; white-space: pre;
+    }
+    #hud .bad { color: #ffb3a7; }
+
+    /* beat buttons: paper chips along the bottom, thumb-reachable */
+    #controls {
+      position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 0; right: 0;
+      display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+      z-index: 10; padding: 0 10px;
+    }
+    #controls button {
+      font: 600 14px/1 system-ui, sans-serif; color: var(--ink);
+      background: var(--paper); border: 1.5px solid var(--ink);
+      border-radius: 12px; padding: 12px 16px; min-width: 84px;
+      box-shadow: 2px 3px 0 rgba(58,49,40,.18); cursor: pointer;
+      touch-action: manipulation;
+    }
+    #controls button:active { transform: translate(1px, 2px); box-shadow: 0 1px 0 rgba(58,49,40,.18); }
+    #controls button.primary { background: var(--red); color: var(--paper); border-color: var(--red); }
+    @media (prefers-reduced-motion: reduce) { #controls button:active { transform: none; } }
+  </style>
+</head>
+<body>
+  <div class="tag">
+    <h1>Flock preview · <span>Sedge of Cranes</span></h1>
+    <small id="stamp">Phase 6 · drag to look around</small>
+  </div>
+
+  <div id="hud">loading…</div>
+
+  <div id="controls">
+    <button id="btn-freeze" class="primary">⏸ Freeze</button>
+    <button data-beat="wobble">Beat 1 · wobble</button>
+    <button data-beat="loop">Beat 2 · loop</button>
+    <button data-beat="finale">Beat 3 · circle</button>
+  </div>
+
+  <a-scene
+    background="color: #dfeefa"
+    renderer="antialias: false; colorManagement: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <!-- same lighting recipe as the AR scene: ambient + one directional -->
+    <a-entity light="type: ambient; color: #ffffff; intensity: 0.85"></a-entity>
+    <a-entity light="type: directional; color: #fff6e8; intensity: 0.9"
+              position="0.5 1 0.6"></a-entity>
+
+    <!-- a warm "table" disc so the blob shadows have something to land on -->
+    <a-circle position="0 0 0" rotation="-90 0 0" radius="0.5"
+              material="color: #efe4d0; shader: flat"></a-circle>
+    <!-- stand-in for the child's real crane at the anchor point -->
+    <a-box position="0 0.012 0" depth="0.06" width="0.04" height="0.024"
+           material="color: #ffffff; shader: flat"></a-box>
+
+    <!-- THE FLOCK — identical component + defaults as the AR scene -->
+    <a-entity id="flock" sedge-flock="autoShow: true; autoTarget: false"></a-entity>
+
+    <a-entity id="rig" position="0 0.26 0.55">
+      <a-camera look-controls="magicWindowTrackingEnabled: false"
+                wasd-controls-enabled="false" fov="55"></a-camera>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    (function () {
+      'use strict';
+      document.getElementById('stamp').textContent =
+        'v' + (window.SEDGE_FLOCK_VERSION || '?') + ' · drag to look around';
+
+      var flock = document.getElementById('flock');
+
+      // beat buttons
+      document.querySelectorAll('[data-beat]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          flock.emit('flock-beat', { name: b.dataset.beat });
+        });
+      });
+
+      // freeze / resume toggle (same events the AR app fires on target lost/found)
+      var frozen = false;
+      var fbtn = document.getElementById('btn-freeze');
+      fbtn.addEventListener('click', function () {
+        frozen = !frozen;
+        flock.emit(frozen ? 'flock-freeze' : 'flock-resume');
+        fbtn.textContent = frozen ? '▶ Resume' : '⏸ Freeze';
+      });
+
+      // HUD: FPS from requestAnimationFrame, draw calls + triangles from three
+      var hud = document.getElementById('hud');
+      var frames = 0, last = performance.now();
+      function raf() { frames++; requestAnimationFrame(raf); }
+      requestAnimationFrame(raf);
+      setInterval(function () {
+        var now = performance.now();
+        var fps = Math.round(frames * 1000 / (now - last));
+        frames = 0; last = now;
+        var scene = document.querySelector('a-scene');
+        var info = scene && scene.renderer ? scene.renderer.info.render : null;
+        var cls = fps < 24 ? ' class="bad"' : '';
+        hud.innerHTML =
+          '<span' + cls + '>fps        ' + fps + '</span>\n' +
+          'draw calls ' + (info ? info.calls : '–') + '\n' +
+          'triangles  ' + (info ? info.triangles : '–');
+      }, 500);
+    })();
+  </script>
+</body>
+</html>
