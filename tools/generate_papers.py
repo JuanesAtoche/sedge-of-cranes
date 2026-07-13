@@ -44,19 +44,19 @@ OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "assets", "paper
 # ---------------------------------------------------------------------------
 SCHEMES = [
     ("paper_lead_red_seigaiha.png",   "seigaiha", "#b33a2e", "#e8cfa8"),
-    ("paper_blue_asanoha.png",        "asanoha",  "#cfe3ee", "#5b87a6"),
-    ("paper_pink_dots.png",           "dots",     "#f6dfe2", "#c76f85"),
-    ("paper_green_stripes.png",       "stripes",  "#dcead9", "#7ba07a"),
-    ("paper_lavender_seigaiha.png",   "seigaiha", "#e2ddee", "#8a7fb4"),
-    ("paper_peach_asanoha.png",       "asanoha",  "#f7e3d3", "#cf8f63"),
-    ("paper_yellow_dots.png",         "dots",     "#f6ecc9", "#c2a24e"),
+    ("paper_blue_asanoha.png",        "asanoha",  "#cfe3ee", "#38607f"),
+    ("paper_pink_dots.png",           "dots",     "#f6dfe2", "#a94b64"),
+    ("paper_green_stripes.png",       "stripes",  "#dcead9", "#4f7a4e"),
+    ("paper_lavender_seigaiha.png",   "seigaiha", "#e2ddee", "#5d5290"),
+    ("paper_peach_asanoha.png",       "asanoha",  "#f7e3d3", "#a5602f"),
+    ("paper_yellow_dots.png",         "dots",     "#f6ecc9", "#96762a"),
 ]
 
 
 def draw_seigaiha(d: ImageDraw.ImageDraw, ink: str):
     """Overlapping fans of concentric arcs. Drawn bottom-up, row by row,
     so each new 'wave' partially covers the one behind it."""
-    r = SIZE // 8                     # fan radius
+    r = SIZE // 4                     # fan radius (v0.5.2: 2x bigger, kids' feedback)
     step_x, step_y = r * 2, r         # rows overlap by half → scale pattern
     rings = 4
     for row in range(-1, SIZE // step_y + 2):
@@ -68,7 +68,7 @@ def draw_seigaiha(d: ImageDraw.ImageDraw, ink: str):
             d.ellipse([x - r, y - r, x + r, y + r], fill=None)
             for k in range(rings):
                 rr = r - k * (r // rings)
-                width = 6 if k == 0 else 4
+                width = 12 if k == 0 else 8
                 d.arc([x - rr, y - rr, x + rr, y + rr], 180, 360, fill=ink, width=width)
 
 
@@ -76,9 +76,9 @@ def draw_asanoha(d: ImageDraw.ImageDraw, ink: str):
     """Hemp-leaf lattice: an equilateral-triangle grid where every triangle
     gets three spokes from its corners to its centroid — that's the whole
     trick behind this famous pattern."""
-    s = SIZE // 5                     # triangle edge length
+    s = SIZE // 3                     # triangle edge length (v0.5.2: 2x bigger)
     h = s * math.sqrt(3) / 2          # triangle height
-    w = 5
+    w = 10
     rows = int(SIZE / h) + 2
     cols = int(SIZE / s) + 2
     for row in range(-1, rows):
@@ -98,8 +98,8 @@ def draw_asanoha(d: ImageDraw.ImageDraw, ink: str):
 
 def draw_dots(d: ImageDraw.ImageDraw, ink: str):
     """Offset polka-dot grid, like mame-shibori tenugui cloth."""
-    step = SIZE // 8
-    r = step // 5
+    step = SIZE // 5   # v0.5.2: bigger dots
+    r = step // 4
     for row in range(-1, SIZE // step + 2):
         y = row * step
         offset = step // 2 if row % 2 else 0
@@ -110,10 +110,10 @@ def draw_dots(d: ImageDraw.ImageDraw, ink: str):
 
 def draw_stripes(d: ImageDraw.ImageDraw, ink: str):
     """Fine 45-degree pinstripes."""
-    step = SIZE // 14
+    step = SIZE // 8   # v0.5.2: wider stripes
     for i in range(-SIZE // step, 2 * SIZE // step + 1):
         x = i * step
-        d.line([(x, 0), (x + SIZE, SIZE)], fill=ink, width=5)
+        d.line([(x, 0), (x + SIZE, SIZE)], fill=ink, width=11)
 
 
 PATTERNS = {
