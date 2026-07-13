@@ -11,7 +11,7 @@
  *  - unsupported/error state shows a pre-rendered GIF of the experience
  */
 
-const APP_VERSION = "0.4.0";   // bump with every deploy (also bump ?v= in index.html)
+const APP_VERSION = "0.5.0";   // bump with every deploy (also bump ?v= in index.html)
 
 // Pinned CDN libraries (verified against the published npm packages)
 const LIBS = [
@@ -20,8 +20,8 @@ const LIBS = [
   "js/flock.js?v=" + APP_VERSION,
 ];
 
-// Beats: VTT cue number (1-based) → effect name in flock.js
-const BEAT_CUES = { 4: "wobble", 7: "loop", 10: "circle" };
+// Beats: VTT cue number (1-based) → beat name in flock.js (v0.5.0 event API)
+const BEAT_CUES = { 4: "wobble", 7: "loop", 10: "finale" };
 
 const $ = (id) => document.getElementById(id);
 
@@ -97,13 +97,10 @@ async function loadStory() {
   } catch (e) { console.warn("Subtitles unavailable:", e); }
 }
 
-//modified by JC: function flock() {
-  //const el = document.querySelector("[flock]");
-  //return el && el.components.flock;
-//}
-
 function flock() {
-  return document.getElementById("flock");
+  // v0.5.0: the component is named sedge-flock and is driven by EVENTS
+  // (emit), not method calls — see the API comment at the top of flock.js.
+  return document.querySelector("[sedge-flock]");
 }
 
 function onTimeUpdate() {
@@ -113,27 +110,14 @@ function onTimeUpdate() {
   bar.textContent = cue ? cue.text : "";
   bar.hidden = !(subsOn && tracked && storyState === "playing" && cue);
 
-  //modified by JC: for (const [num, name] of Object.entries(BEAT_CUES)) {
-    //const c = cues[num - 1];
-    //if (c && t >= c.start && !firedBeats.has(num)) {
-      //firedBeats.add(num);
-      //const fl = flock();
-      //if (fl) fl.beat(name);
-    //}
-  //}
-
   for (const [num, name] of Object.entries(BEAT_CUES)) {
     const c = cues[num - 1];
     if (c && t >= c.start && !firedBeats.has(num)) {
       firedBeats.add(num);
-      const flockEl = flock();
-      if (flockEl) {
-        // Map 'circle' to 'finale', otherwise pass the name ('wobble' or 'loop')
-        const beatName = name === 'circle' ? 'finale' : name;
-        flockEl.emit('flock-beat', { name: beatName });
-      }
+      const fl = flock();
+      if (fl) fl.emit("flock-beat", { name });
     }
-  }  
+  }
 }
 
 function startStory() {
