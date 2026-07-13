@@ -38,7 +38,7 @@
     throw new Error('flock.js: A-Frame must be loaded first');
   }
 
-  var VERSION = '0.5.0-dev';
+  var VERSION = '0.5.1-dev';   // 0.5.1: kids' field feedback — flock size ×2
 
   /* ----- deterministic per-crane randomness --------------------------------
    * mulberry32 is a tiny seeded random generator. Seeding by crane index
@@ -263,7 +263,12 @@
   AFRAME.registerComponent('sedge-flock', {
     schema: {
       count:        { default: 7 },
-      wingspan:     { default: 0.11 },  // meters (real-world ≈ 11 cm)
+      size:         { default: 2.0 },   // whole-flock scale multiplier.
+                                        // Kids' verdict: 1.0 was too small.
+                                        // Scales wingspan, spacing, orbit
+                                        // radius and altitude TOGETHER so
+                                        // the formation never overlaps.
+      wingspan:     { default: 0.11 },  // meters (real-world ≈ 11 cm at size 1)
       orbitRadius:  { default: 0.13 },  // meters from mat/crane center
       altitude:     { default: 0.12 },  // meters above the anchor plane
       orbitSeconds: { default: 20 },    // one full orbit (spec: ≈ 20 s)
@@ -308,6 +313,7 @@
        *                     → unit[i] (V offset + bob)  ── shadow plane
        *                         → roll[i] (bank+flutter) → crane meshes  */
       this.orbitGroup = new THREE.Group();
+      this.orbitGroup.scale.setScalar(d.size);  // ×2 by default (see schema)
       this.formation = new THREE.Group();
       this.formation.position.set(d.orbitRadius, d.altitude, 0);
       this.formation.rotation.y = Math.PI; // face direction of travel
