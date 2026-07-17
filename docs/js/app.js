@@ -11,7 +11,7 @@
  *  - unsupported/error state shows a pre-rendered GIF of the experience
  */
 
-const APP_VERSION = "0.5.2";   // bump with every deploy (also bump ?v= in index.html)
+const APP_VERSION = "0.6.0";   // bump with every deploy (also bump ?v= in index.html)
 
 // Pinned CDN libraries (verified against the published npm packages)
 const LIBS = [

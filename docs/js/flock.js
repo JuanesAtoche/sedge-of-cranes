@@ -19,16 +19,65 @@
  * working with zero app.js changes: found → show+resume, lost → freeze.
  *
  * PERFORMANCE NOTES (the "why" behind the structure):
- *   - Each crane is only ~6 draw calls: 1 body mesh (body+neck+head+tail
- *     merged), 4 wing panels (separate ONLY because they pivot), 1 crease
- *     LineSegments, 1 blob-shadow plane. 7 cranes ≈ 50 calls — comfortable
- *     for a mid-range Android. Draw calls, not triangles, are the budget
- *     that matters at this scale.
- *   - Wing-fold creases are baked as darkened vertex colors instead of
- *     extra Line objects: that saved 14 draw calls for an identical look.
+ *   - Each crane is ~6 draw calls: 1 body mesh (body+neck+head+tail merged),
+ *     4 wing panels (separate ONLY because they pivot), 1 blob-shadow plane.
+ *     Measured 0.6.0: 31 draw calls / 373 triangles for the whole flock.
  *   - No shadow maps. The "shadows" are radial-gradient planes (~free).
  *   - flatShading:true lights each facet uniformly — folded paper in one
- *     boolean. Per-face brightness jitter (vertex colors) adds the grain.
+ *     boolean.
+ *
+ * ==========================================================================
+ * v0.6.0 — "LET THE LIGHT DO THE WORK" (Phase 6, steps A + A+)
+ * ==========================================================================
+ * Field-test verdict from the kids on v0.5.2: "it doesn't seem like a real
+ * folded origami paper." They were right, and they were describing three
+ * specific things this version removes.
+ *
+ * THE DIAGNOSIS. A real paper crane (see docs/refs/real_crane.jpg) is ONE
+ * FLAT COLOUR, yet you can count six distinct brightness values across it.
+ * Paper reads as paper because each flat panel catches a measurably
+ * different amount of light, and the boundary between two panels is a
+ * dead-straight, razor-sharp discontinuity. Everything else is decoration.
+ *
+ * v0.5.2 destroyed all three of those properties:
+ *
+ *   1. FACET JITTER (jit = 0.008) displaced every interior vertex along the
+ *      face normal, so one flat wing panel became ~12 facets pointing ~12
+ *      directions. That is crumpled foil, not folded paper. → jitter now 0.
+ *
+ *   2. PER-FACE BRIGHTNESS GRAIN (0.93 + rand*0.07) sprinkled random
+ *      lightness on top of that, adding noise the eye reads as texture
+ *      mottling. → grain now 0 by default.
+ *
+ *   3. PAINTED CREASES — a dark LineSegments overlay plus a darkened
+ *      texture column on the wing fold. But look at a real crane: there are
+ *      NO dark lines. What you read as a crease is a highlight meeting a
+ *      shadow. A painted line is a printed line, and it stays wrong as the
+ *      crane rotates. → removed; the geometry makes its own creases.
+ *
+ * And the lighting could never have shown any of it anyway: the old rig ran
+ * ambient 0.9 + directional 0.7 — MORE ambient than key. Ambient has no
+ * direction, so ~57% of every facet's brightness carried zero shape
+ * information. That is the mathematical definition of "flat".
+ *
+ * WHAT REPLACES IT (measured 59.94 fps on the field-test iPhone with camera
+ * + MindAR tracking + audio all running, so we had ~2.5x headroom to spend):
+ *   - MeshStandardMaterial (PBR), metalness 0.0 — paper is a DIELECTRIC.
+ *     (If anyone ever tells you to raise metalness for "foil", say no: a
+ *     metal has no diffuse component at all and your cranes go chrome.)
+ *   - A procedural environment map, generated in-browser at runtime, costing
+ *     ZERO download bytes. This is not optional: PBR without an environment
+ *     map looks WORSE than Lambert — flat grey with a hot spot. The env map
+ *     is what gives a single flat colour its six tonal values.
+ *   - Key/rim directional lights at a ~4:1 ratio against fill.
+ *   - ACES tone mapping (set on <a-scene renderer>) so the key doesn't clip.
+ *
+ * EVERY CHANGE HERE COSTS 0 DOWNLOAD BYTES. The page-weight budget never
+ * had anything to do with how the cranes looked.
+ *
+ * TUNING: see the TUNABLES block below. Set pbr:false for a one-flag revert
+ * to the old Lambert path if an Android device struggles (untested there
+ * as of 0.6.0 — the 59.94 fps reading is from an iPhone).
  * ========================================================================== */
 
 /* global AFRAME, THREE */
@@ -38,7 +87,7 @@
     throw new Error('flock.js: A-Frame must be loaded first');
   }
 
-  var VERSION = '0.5.2-dev';   // 0.5.2: bolder washi patterns, tunable tiling
+  var VERSION = '0.6.0-dev';   // 0.6.0: flat panels + PBR + real lighting
 
   /* ----- deterministic per-crane randomness --------------------------------
    * mulberry32 is a tiny seeded random generator. Seeding by crane index
@@ -66,14 +115,33 @@
    * ========================================================================== */
 
   /* GB collects raw triangles (non-indexed = each face owns its vertices,
-   * which is exactly what flat shading and per-FACE vertex colors need). */
-  function GB(rand) {
+   * which is exactly what flat shading needs: every facet gets its own
+   * normal, so two panels at different angles produce a hard, geometric
+   * crease with no painted line involved).
+   *
+   *   grain — random per-face brightness. v0.5.2 used 0.07 and it read as
+   *           mottling. 0 = every facet on a flat panel is exactly one tone,
+   *           which is what the reference photo shows.
+   *   ao    — how much of the hand-baked panel shading (the 0.88/0.86
+   *           multipliers below) to keep. Those numbers were painted in when
+   *           the lighting was flat and couldn't shade anything. Now that a
+   *           real key light exists, baked shading FIGHTS it, so we lerp it
+   *           mostly out (0.35) rather than deleting it — a little bit of it
+   *           still helps separate the upper and lower shells. */
+  function GB(rand, grain, ao) {
     this.pos = []; this.col = []; this.uv = [];
     this.rand = rand;
+    this.grain = (grain === undefined) ? 0 : grain;
+    this.ao = (ao === undefined) ? 1 : ao;
   }
   GB.prototype.tri = function (a, b, c, shade, uvOf) {
-    // one brightness value per FACE → the paper-grain facet look
-    var j = shade * (0.93 + this.rand() * 0.07);
+    // lerp the baked shading toward white by (1 - ao)
+    var s = 1 + (shade - 1) * this.ao;
+    // rand() is consumed even when grain is 0 so that per-crane "personality"
+    // (flap phase etc.) stays identical across grain settings — that makes
+    // before/after screenshots comparable.
+    var r = this.rand();
+    var j = s * (1 - this.grain + r * this.grain);
     var pts = [a, b, c];
     for (var i = 0; i < 3; i++) {
       var p = pts[i];
@@ -83,9 +151,11 @@
       this.uv.push(t[0], t[1]);
     }
   };
-  /* Subdivide a triangle once (4 children), nudging the midpoints along the
-   * face normal — turns one flat face into a cluster of slightly-off facets,
-   * i.e. hand-folded paper instead of CAD paper. */
+  /* Subdivide a triangle once (4 children). With jitter = 0 (the default
+   * since 0.6.0) the children stay coplanar, so the panel remains dead flat
+   * and reads as a single crisp facet — the whole point. Jitter is kept as a
+   * tunable because a "crumpled kraft paper" look is a legitimate different
+   * aesthetic (see docs/refs/kraft_flock.jpg), just not the one we want. */
   GB.prototype.triSub = function (a, b, c, shade, uvOf, jitter) {
     var A = new THREE.Vector3().fromArray(a), B = new THREE.Vector3().fromArray(b),
         C = new THREE.Vector3().fromArray(c);
@@ -153,8 +223,8 @@
   var WING_INNER_LEN = 0.20;                    // root → fold line
   var WING_OUTER_LEN = 0.30;                    // fold line → tip
 
-  function buildBodyGeometry(rand, jit) {
-    var gb = new GB(rand);
+  function buildBodyGeometry(rand, jit, grain, ao) {
+    var gb = new GB(rand, grain, ao);
     // upper shell (4 faces meeting at the ridge peak T)
     gb.triSub(F, L, T, 1.0, uvTopDown, jit);
     gb.triSub(F, T, R, 1.0, uvTopDown, jit);
@@ -184,9 +254,9 @@
     return gb.build();
   }
 
-  function buildInnerWing(rand, jit) {
+  function buildInnerWing(rand, jit, grain, ao) {
     // Local frame: origin AT the root pivot, wing extends +X, forward +Z.
-    var gb = new GB(rand);
+    var gb = new GB(rand, grain, ao);
     gb.quadGrid(
       [0, 0, 0.14],                    [WING_INNER_LEN, -0.015, 0.10],
       [WING_INNER_LEN, -0.015, -0.12], [0, 0, -0.16],
@@ -194,35 +264,80 @@
     return gb.build();
   }
 
-  function buildOuterWing(rand, jit) {
-    // Local frame: origin AT the fold-line pivot. First column darkened →
-    // the visible crease of the wing fold, with zero extra draw calls.
-    var gb = new GB(rand);
-    var creaseCol = function (i) { return i === 0 ? 0.82 : 1.0; };
+  function buildOuterWing(rand, jit, grain, ao) {
+    // Local frame: origin AT the fold-line pivot.
+    //
+    // v0.5.2 darkened the first column of this panel to fake the wing-fold
+    // crease. Removed in 0.6.0: this panel PIVOTS relative to the inner one,
+    // so the two surfaces genuinely sit at an angle to each other and the
+    // key light draws that crease for free — correctly, and from every
+    // viewing angle, which a painted stripe never managed.
+    var gb = new GB(rand, grain, ao);
     var midX = WING_OUTER_LEN * 0.55;
     gb.quadGrid(
       [0, 0, 0.10],           [midX, 0, 0.055],
       [midX, 0, -0.085],      [0, 0, -0.12],
-      2, 2, 0.98, uvTopDown, jit, creaseCol);
+      2, 2, 0.98, uvTopDown, jit);
     // taper to the swept-back tip
     var tip = [WING_OUTER_LEN, 0, -0.05];
     gb.tri([midX, 0, 0.055], tip, [midX, 0, -0.085], 0.98, uvTopDown);
     return gb.build();
   }
 
-  /* Static crease lines (ridge, neck fold, tail fold, wing roots). Wing-fold
-   * creases live in vertex colors instead — see buildOuterWing. */
-  function buildCreaseGeometry() {
-    var pts = [];
-    function seg(a, b) { pts.push(a[0], a[1], a[2], b[0], b[1], b[2]); }
-    seg(F, T); seg(T, Bk);                                     // spine ridge
-    seg([0, 0.02, 0.26], [0, 0.09, 0.235]);                    // neck base fold
-    seg([0, 0.02, -0.24], [0, 0.09, -0.215]);                  // tail base fold
-    seg([WING_ROOT_X, WING_ROOT_Y, 0.13], [WING_ROOT_X, WING_ROOT_Y, -0.15]);   // wing roots
-    seg([-WING_ROOT_X, WING_ROOT_Y, 0.13], [-WING_ROOT_X, WING_ROOT_Y, -0.15]);
-    var g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    return g;
+  /* ==========================================================================
+   * THE ENVIRONMENT MAP  — the single most important object in this file
+   * ==========================================================================
+   * CONCEPT (5 lines, as promised): an "environment map" is a tiny picture of
+   * the world surrounding the object. PBR materials look up that picture to
+   * answer "what light arrives at this facet from the direction it faces?"
+   * Without one, every facet not hit by a lamp gets NOTHING and renders black
+   * or flat grey. WITH one, a facet tilted up catches sky, a facet tilted
+   * down catches warm bounce off the table — which is exactly why the real
+   * blue crane in our reference photo shows six tones from one flat colour.
+   *
+   * We draw ours by hand: a 128x64 equirectangular gradient (sky above,
+   * horizon band, warm floor bounce below). PMREMGenerator then pre-blurs it
+   * into the format three.js wants for roughness lookups. Total download
+   * cost: ZERO bytes — it is generated on the phone in about 2 ms.
+   *
+   * PHASE 6 STEP E PREVIEW: because this is generated in code rather than
+   * loaded from a file, we can later re-tint it from the live camera feed
+   * (sample a 16x16 downscale of the video for average brightness/colour) and
+   * the cranes will be lit by the child's ACTUAL room. That is the free-tier
+   * version of what ARKit light estimation does. Not in this commit. */
+  var envRT = null;
+  function buildEnvironment(renderer, opts) {
+    if (envRT) return envRT.texture;
+    if (!renderer || !THREE.PMREMGenerator) return null;
+
+    var W = 128, H = 64;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var ctx = c.getContext('2d');
+    // equirectangular: y=0 is straight up, y=H is straight down
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0.00, opts.skyTop);      // zenith
+    g.addColorStop(0.45, opts.skyHorizon);  // horizon, just above
+    g.addColorStop(0.55, opts.groundNear);  // horizon, just below
+    g.addColorStop(1.00, opts.groundFar);   // straight down: table bounce
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // A soft bright patch = a window/lamp. This is what puts a travelling
+    // highlight on a banking wing, and it is most of the "alive" feeling.
+    var s = ctx.createRadialGradient(W * 0.30, H * 0.22, 1, W * 0.30, H * 0.22, H * 0.5);
+    s.addColorStop(0, opts.sun);
+    s.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = s; ctx.fillRect(0, 0, W, H);
+
+    var tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    var pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    envRT = pmrem.fromEquirectangular(tex);
+    pmrem.dispose();
+    tex.dispose();
+    return envRT.texture;
   }
 
   /* Blob shadow: a radial gradient drawn once on a shared canvas texture. */
@@ -239,15 +354,41 @@
     return shadowTexture;
   }
 
-  /* Paper material: flat shading + vertex-color grain + texture + a darker
-   * BACK face. The back-face trick is a 1-line shader injection: paper's
-   * reverse side is always a bit dimmer, and it makes DoubleSide geometry
-   * read as a sheet with two sides rather than a hollow shell. */
-  function makePaperMaterial(texture) {
-    var m = new THREE.MeshLambertMaterial({
-      map: texture, vertexColors: true, flatShading: true,
-      side: THREE.DoubleSide, transparent: true, opacity: 0
-    });
+  /* Paper material.
+   *
+   * WHY PBR (MeshStandardMaterial) AND NOT LAMBERT: MeshLambertMaterial has
+   * no specular term AT ALL. It physically cannot produce a sheen. But look
+   * at the reference photo — the brightest wing is catching a soft highlight.
+   * Paper is not matte; it is a rough dielectric. Lambert can never show that.
+   *
+   * metalness: 0.0 — NON-NEGOTIABLE. Paper is a dielectric. Metals have no
+   *   diffuse component, so raising this turns the cranes into dark chrome.
+   *   Even gold-foil origami paper should stay near 0 here.
+   * roughness: 0.62 — washi is rough but not chalk. Lower = glossier/plastic.
+   *
+   * The back-face trick: paper's reverse side is always a bit dimmer, and it
+   * makes DoubleSide geometry read as a sheet with two sides rather than a
+   * hollow shell. One line of shader injection. */
+  function makePaperMaterial(texture, opts) {
+    var m;
+    if (opts.pbr) {
+      m = new THREE.MeshStandardMaterial({
+        map: texture, vertexColors: true, flatShading: true,
+        side: THREE.DoubleSide, transparent: true, opacity: 0,
+        metalness: 0.0,
+        roughness: opts.roughness,
+        envMapIntensity: opts.envIntensity
+      });
+    } else {
+      // Kill switch. If a mid-range Android can't hold 24 fps with PBR, set
+      // pbr:false on the entity and you are back on the 0.5.x lighting model
+      // (but keep jitter 0 and grain 0 — those cost nothing and were the
+      // bigger half of the problem anyway).
+      m = new THREE.MeshLambertMaterial({
+        map: texture, vertexColors: true, flatShading: true,
+        side: THREE.DoubleSide, transparent: true, opacity: 0
+      });
+    }
     m.onBeforeCompile = function (shader) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
@@ -269,16 +410,43 @@
                                         // radius and altitude TOGETHER so
                                         // the formation never overlaps.
       wingspan:     { default: 0.11 },  // meters (real-world ≈ 11 cm at size 1)
-      patternRepeat:{ default: 1.0 },   // texture tiles per crane. Lower =
-                                        // bigger, more readable motifs.
-                                        // Was 2.4; kids couldn't see the
-                                        // patterns (texel density lesson).
+      patternRepeat:{ default: 2.5 },   // texture tiles per crane.
+                                        // 0.5.2 used 1.0 after the kids said
+                                        // "we can't see the patterns" — but
+                                        // that made each motif ~30 texels of
+                                        // a 256px tile stretched over ~200
+                                        // screen pixels, i.e. BLURRY. The
+                                        // complaint may have been sharpness,
+                                        // not size. 2.5 gives ~3x the texel
+                                        // density AND real-washi motif scale.
+                                        // A/B this one with the kids.
       orbitRadius:  { default: 0.13 },  // meters from mat/crane center
       altitude:     { default: 0.12 },  // meters above the anchor plane
       orbitSeconds: { default: 20 },    // one full orbit (spec: ≈ 20 s)
       papersPath:   { default: 'assets/papers/' },
       autoTarget:   { default: true },  // react to MindAR targetFound/Lost
-      autoShow:     { default: false }  // fade in immediately (preview page)
+      autoShow:     { default: false }, // fade in immediately (preview page)
+
+      /* ----------------------- TUNABLES (v0.6.0) -------------------------
+       * Everything that decides whether these read as PAPER lives here.
+       * Change one at a time and take a screenshot from the same angle. */
+      pbr:          { default: true },  // false → old Lambert path (kill switch)
+      jitter:       { default: 0.0 },   // facet displacement, crane units.
+                                        // 0     = crisp folded paper (target)
+                                        // 0.008 = the 0.5.2 crumpled-foil look
+      grain:        { default: 0.0 },   // random per-face brightness (0.5.2: 0.07)
+      bakedAO:      { default: 0.35 },  // how much hand-painted panel shading
+                                        // to keep now that real light exists
+      roughness:    { default: 0.62 },  // paper sheen. <0.4 starts to look plastic
+      envIntensity: { default: 1.0 },   // strength of the environment lighting
+      anisotropy:   { default: 8 },     // sharpens textures at grazing angles —
+                                        // banking wings hit those constantly
+      // Environment map colours. These ARE your lighting: warm room by default.
+      envSkyTop:    { default: '#dceaf6' },
+      envSkyHorizon:{ default: '#f2ecdf' },
+      envGroundNear:{ default: '#e8dcc6' },
+      envGroundFar: { default: '#c9b79a' },
+      envSun:       { default: 'rgba(255,247,230,0.95)' }
     },
 
     /* The seven papers, lead first (must match tools/generate_papers.py). */
@@ -324,10 +492,40 @@
       this.orbitGroup.add(this.formation);
       this.el.object3D.add(this.orbitGroup);
 
-      this.creaseMat = new THREE.LineBasicMaterial({
-        color: 0x2b1f14, transparent: true, opacity: 0
-      });
       this.shadowTex = getShadowTexture();
+
+      /* Environment map. The renderer may not exist yet when a component
+       * inits, so attach it as soon as the scene is ready. Setting
+       * scene.environment makes EVERY MeshStandardMaterial in the scene use
+       * it automatically — no per-material wiring needed. */
+      var sceneEl = this.el.sceneEl;
+      this.paperTextures = [];    // for the anisotropy fixup below
+      var self0 = this;
+      var applyEnv = function () {
+        var tex = buildEnvironment(sceneEl.renderer, {
+          skyTop: d.envSkyTop, skyHorizon: d.envSkyHorizon,
+          groundNear: d.envGroundNear, groundFar: d.envGroundFar,
+          sun: d.envSun
+        });
+        if (tex) sceneEl.object3D.environment = tex;
+
+        // If the renderer wasn't ready when the cranes were built, their
+        // textures got anisotropy 1. Fix them now that it is.
+        var r = sceneEl.renderer;
+        if (r) {
+          var maxA = r.capabilities.getMaxAnisotropy();
+          self0.paperTextures.forEach(function (t) {
+            t.anisotropy = Math.min(d.anisotropy, maxA);
+            t.needsUpdate = true;
+          });
+        }
+        if (!tex && d.pbr) {
+          console.warn('[sedge-flock] no environment map — PBR will look ' +
+                       'flat. Check PMREMGenerator availability.');
+        }
+      };
+      if (sceneEl.renderer) applyEnv();
+      else sceneEl.addEventListener('renderstart', applyEnv, { once: true });
 
       var loader = new THREE.TextureLoader();
       var scale = d.wingspan / 1.1; // crane units → meters
@@ -366,14 +564,18 @@
         });
         console.log('[sedge-flock ' + VERSION + '] cranes:', d.count,
           '| triangles total:', tris, '(' + Math.round(tris / d.count) + '/crane)',
-          '| est. draw calls:', d.count * 7);
+          '| est. draw calls:', d.count * 6,
+          '| pbr:', d.pbr, '| jitter:', d.jitter, '| grain:', d.grain);
       }
     },
 
     buildCrane: function (i, loader, scale) {
       var d = this.data;
       var rand = mulberry32(1000 + i * 77);   // per-crane personality seed
-      var jit = 0.008;                        // facet jitter (crane units)
+      var jit = d.jitter;                     // 0 since 0.6.0 — see TUNABLES
+      var matOpts = {
+        pbr: d.pbr, roughness: d.roughness, envIntensity: d.envIntensity
+      };
 
       var self = this;
       var mat; // created below; the error callback needs to reference it
@@ -392,7 +594,14 @@
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(d.patternRepeat, d.patternRepeat);
       tex.offset.set(rand(), rand());         // no two cranes wear it alike
-      mat = makePaperMaterial(tex);
+      // Anisotropic filtering: without it, a wing banking away from the
+      // camera smears its pattern into mush (mipmaps average too hard at
+      // grazing angles). Our cranes bank constantly, so this matters.
+      var renderer = this.el.sceneEl.renderer;
+      var maxAniso = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
+      tex.anisotropy = Math.min(d.anisotropy, maxAniso);
+      this.paperTextures.push(tex);
+      mat = makePaperMaterial(tex, matOpts);
 
       var unit = new THREE.Group();           // V position + bob
       var off = this.V_OFFSETS[i % this.V_OFFSETS.length];
@@ -404,8 +613,12 @@
       craneRoot.scale.setScalar(scale);
       roll.add(craneRoot);
 
-      craneRoot.add(new THREE.Mesh(buildBodyGeometry(rand, jit), mat));
-      craneRoot.add(new THREE.LineSegments(buildCreaseGeometry(), this.creaseMat));
+      craneRoot.add(new THREE.Mesh(
+        buildBodyGeometry(rand, jit, d.grain, d.bakedAO), mat));
+      // NOTE: the dark crease LineSegments that lived here in 0.5.x is gone.
+      // The ridge, the neck fold and the wing folds are all real angle
+      // changes in the geometry — the key light draws them, correctly, from
+      // every viewpoint. That is what a crease actually is.
 
       // wings: root pivot → inner panel → fold pivot → outer panel
       var wings = [];
@@ -414,10 +627,12 @@
         rootPivot.position.set(WING_ROOT_X, WING_ROOT_Y, 0);
         if (side === 1) rootPivot.scale.x = -1;   // mirror = free left wing
         rootPivot.position.x *= (side === 1 ? -1 : 1);
-        var inner = new THREE.Mesh(buildInnerWing(rand, jit), mat);
+        var inner = new THREE.Mesh(
+          buildInnerWing(rand, jit, d.grain, d.bakedAO), mat);
         var foldPivot = new THREE.Group();
         foldPivot.position.set(WING_INNER_LEN, -0.015, 0);
-        var outer = new THREE.Mesh(buildOuterWing(rand, jit), mat);
+        var outer = new THREE.Mesh(
+          buildOuterWing(rand, jit, d.grain, d.bakedAO), mat);
         foldPivot.add(outer);
         rootPivot.add(inner);
         rootPivot.add(foldPivot);
@@ -473,7 +688,6 @@
         for (var k = 0; k < this.cranes.length; k++) {
           this.cranes[k].mat.opacity = eased;
         }
-        this.creaseMat.opacity = eased * 0.30;
         if (f >= 1) {
           this.fadeT = -1;
           for (k = 0; k < this.cranes.length; k++) {
@@ -574,6 +788,7 @@
 
     remove: function () {
       // free GPU memory if the entity is ever removed
+      if (envRT) { envRT.dispose(); envRT = null; }
       this.el.object3D.traverse(function (o) {
         if (o.isMesh || o.isLineSegments) {
           o.geometry.dispose();
