@@ -18,7 +18,7 @@
     and freeze/resume · the HUD shows FPS, draw calls and triangles.
   -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="js/flock.js?v=0.5.2"></script>
+  <script src="js/flock.js?v=0.6.0"></script>
   <style>
     :root {
       --paper: #fdf9f0;
@@ -71,7 +71,7 @@
 <body>
   <div class="tag">
     <h1>Flock preview · <span>Sedge of Cranes</span></h1>
-    <small id="stamp">Phase 6 · drag to look around</small>
+    <small id="stamp">Phase 6 · steps A+A+ · drag to look around</small>
   </div>
 
   <div id="hud">loading…</div>
@@ -85,14 +85,17 @@
 
   <a-scene
     background="color: #dfeefa"
-    renderer="antialias: false; colorManagement: true"
+    renderer="antialias: true; colorManagement: true; toneMapping: ACESFilmic; exposure: 1.15"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
     <!-- same lighting recipe as the AR scene: ambient + one directional -->
-    <a-entity light="type: ambient; color: #ffffff; intensity: 0.85"></a-entity>
-    <a-entity light="type: directional; color: #fff6e8; intensity: 0.9"
-              position="0.5 1 0.6"></a-entity>
+    <!-- same rig as the AR scene — see index.html for the full rationale -->
+    <a-entity light="type: hemisphere; color: #dceaf6; groundColor: #e8dcc6; intensity: 0.35"></a-entity>
+    <a-entity light="type: directional; color: #fff4e2; intensity: 1.15"
+              position="0.6 1.2 0.5"></a-entity>
+    <a-entity light="type: directional; color: #ffdcb4; intensity: 0.35"
+              position="-0.5 -0.3 -0.8"></a-entity>
 
     <!-- a warm "table" disc so the blob shadows have something to land on -->
     <a-circle position="0 0 0" rotation="-90 0 0" radius="0.5"

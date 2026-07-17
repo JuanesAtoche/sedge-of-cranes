@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sedge of Cranes</title>
-  <link rel="stylesheet" href="css/style.css?v=0.4.0" />
+  <link rel="stylesheet" href="css/style.css?v=0.6.0" />
   <!--
     NOTE (Phase 4): the AR libraries (A-Frame 1.5.0 + MindAR 1.2.5, ~1.5 MB)
     are now LAZY-LOADED by js/app.js when the user taps Start. The landing
@@ -55,12 +55,31 @@
       <a-scene id="ar-scene"
         mindar-image="imageTargetSrc: assets/targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; warmupTolerance: 2; missTolerance: 30"
         color-space="sRGB"
-        renderer="colorManagement: true"
+        renderer="colorManagement: true; antialias: true; toneMapping: ACESFilmic; exposure: 1.15"
         vr-mode-ui="enabled: false"
         device-orientation-permission-ui="enabled: false">
         <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-        <a-entity light="type: ambient; intensity: 0.9"></a-entity>
-        <a-entity light="type: directional; intensity: 0.7" position="0.5 1 2"></a-entity>
+        <!-- ===================== LIGHT RIG (v0.6.0) =====================
+             The 0.5.x rig was ambient 0.9 + directional 0.7 — MORE ambient
+             than key light. Ambient has no direction, so most of every
+             facet's brightness carried no shape information and the cranes
+             read as flat printed shapes. A real paper crane shows ~6 tones
+             from ONE flat colour; that only happens at a key:fill ratio
+             around 4:1.
+
+             Most of the "fill" now comes from the procedural environment map
+             built in flock.js (sky above, warm table bounce below), which is
+             also what gives the paper its sheen. The hemisphere light below
+             is deliberate insurance: MeshLambertMaterial ignores environment
+             maps, so without it the pbr:false kill switch would render the
+             flock nearly black.
+
+             Tune exposure on the <a-scene renderer> above, not these. -->
+        <a-entity light="type: hemisphere; color: #dceaf6; groundColor: #e8dcc6; intensity: 0.35"></a-entity>
+        <a-entity light="type: directional; color: #fff4e2; intensity: 1.15" position="0.6 1.2 0.5"></a-entity>
+        <!-- rim/back light: paper is translucent, and light bleeding through
+             a sheet is a big part of why real cranes glow. This fakes it. -->
+        <a-entity light="type: directional; color: #ffdcb4; intensity: 0.35" position="-0.5 -0.3 -0.8"></a-entity>
         <a-entity id="mat-anchor" mindar-image-target="targetIndex: 0">
           <!--<a-entity flock></a-entity>-->
           <a-entity id="flock" sedge-flock></a-entity>          
@@ -81,7 +100,7 @@
     <button id="btn-subs" class="chip"></button>
   </div>
 
-  <script src="js/strings.js?v=0.5.2"></script>
-  <script src="js/app.js?v=0.5.2"></script>
+  <script src="js/strings.js?v=0.6.0"></script>
+  <script src="js/app.js?v=0.6.0"></script>
 </body>
 </html>
