@@ -18,7 +18,10 @@
     and freeze/resume · the HUD shows FPS, draw calls and triangles.
   -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="js/flock.js?v=0.6.0"></script>
+  <!-- baked authentic-tsuru geometry; must load BEFORE flock.js so the
+       geom:'fold' path can find window.CRANE_FOLD -->
+  <script src="js/crane_fold_geometry.js?v=0.7.0"></script>
+  <script src="js/flock.js?v=0.7.0"></script>
   <style>
     :root {
       --paper: #fdf9f0;
@@ -71,7 +74,10 @@
 <body>
   <div class="tag">
     <h1>Flock preview · <span>Sedge of Cranes</span></h1>
-    <small id="stamp">Phase 6 · steps A+A+ · drag to look around</small>
+    <small id="stamp">Phase 6 · drag to look around</small>
+    <br><small>geometry:
+      <a href="?geom=proc">procedural</a> ·
+      <a href="?geom=fold">authentic fold</a></small>
   </div>
 
   <div id="hud">loading…</div>
@@ -104,8 +110,21 @@
     <a-box position="0 0.012 0" depth="0.06" width="0.04" height="0.024"
            material="color: #ffffff; shader: flat"></a-box>
 
-    <!-- THE FLOCK — identical component + defaults as the AR scene -->
-    <a-entity id="flock" sedge-flock="autoShow: true; autoTarget: false"></a-entity>
+    <!-- THE FLOCK — identical component + defaults as the AR scene.
+         Created from script so ?geom=fold|proc can pick the geometry source
+         BEFORE the component initialises (it reads geom only at init). -->
+    <script>
+      (function () {
+        var m = /[?&]geom=(fold|proc)/.exec(location.search);
+        var geom = m ? m[1] : 'proc';
+        var e = document.createElement('a-entity');
+        e.id = 'flock';
+        e.setAttribute('sedge-flock',
+          'autoShow: true; autoTarget: false; geom: ' + geom);
+        document.currentScript.parentNode.appendChild(e);
+        window.__geom = geom;
+      })();
+    </script>
 
     <!-- Camera rig. Two traps solved here:
          (1) <a-camera> has a HIDDEN default position of y=1.6 m ("standing
@@ -125,7 +144,8 @@
     (function () {
       'use strict';
       document.getElementById('stamp').textContent =
-        'v' + (window.SEDGE_FLOCK_VERSION || '?') + ' · drag to look around';
+        'v' + (window.SEDGE_FLOCK_VERSION || '?') +
+        ' · geom: ' + (window.__geom || 'proc') + ' · drag to look around';
 
       var flock = document.getElementById('flock');
 
