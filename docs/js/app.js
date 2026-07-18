@@ -11,12 +11,16 @@
  *  - unsupported/error state shows a pre-rendered GIF of the experience
  */
 
-const APP_VERSION = "0.6.0";   // bump with every deploy (also bump ?v= in index.html)
+const APP_VERSION = "0.7.0";   // bump with every deploy (also bump ?v= in index.html)
 
 // Pinned CDN libraries (verified against the published npm packages)
 const LIBS = [
   "https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-v1.5.0.min.js",
   "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js",
+  // v0.7.0: the baked authentic-tsuru geometry. Must load before flock.js so
+  // window.CRANE_FOLD exists when the sedge-flock component initializes. If it
+  // ever fails to load, flock.js logs a warning and falls back to proc cranes.
+  "js/crane_fold_geometry.js?v=" + APP_VERSION,
   "js/flock.js?v=" + APP_VERSION,
 ];
 
@@ -183,7 +187,7 @@ async function ensureARLoaded() {
   if (!head.ok) throw new Error("targets.mind missing (compile & upload it — see README)");
 
   await loadScript(LIBS[0]);                                  // A-Frame first
-  await Promise.all([loadScript(LIBS[1]), loadScript(LIBS[2])]); // MindAR + flock
+  await Promise.all(LIBS.slice(1).map(loadScript));           // MindAR + fold geom + flock
 
   // inject the scene now that its custom elements are defined
   const tpl = $("ar-scene-template");
