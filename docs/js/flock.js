@@ -27,6 +27,28 @@
  *     boolean.
  *
  * ==========================================================================
+ * v0.7.0 — "THE AUTHENTIC TSURU" (Phase 6, opt-in geometry upgrade)
+ * ==========================================================================
+ * Adds a second geometry source, selected by geom:'fold' (default stays
+ * 'proc', so nothing changes unless you ask for it — mat mode is untouched).
+ *
+ *   'fold' renders the EXACT folded crane exported from Amanda Ghassaei's
+ *   Origami Simulator (a real, physically-relaxed 88%-folded tsuru), baked to
+ *   a few KB of numbers by tools/generate_crane_from_fold.py and loaded from
+ *   crane_fold_geometry.js. You get an authentic silhouette and creases that
+ *   are REAL fold angles, not hand-guessed panels — which is exactly the
+ *   aesthetic 0.6.0 was chasing, now sourced from ground truth.
+ *
+ *   The mesh is flat-folded and can't be split into the 4-panel wing rig, so
+ *   its wings flap by SOFT SKINNING: each vertex carries a weight (0 on the
+ *   body, ramping to 1 at the tips) and the wing region rotates about the root
+ *   hinge. Vertices on the hinge sit on the axis and don't move, so the root
+ *   never gaps. Verified tear-free in the generator's contact sheet.
+ *
+ *   A/B it with ?geom=fold in the preview and on a phone. When the kids pick a
+ *   winner, flip the schema default. Everything else below is unchanged.
+ *
+ * ==========================================================================
  * v0.6.0 — "LET THE LIGHT DO THE WORK" (Phase 6, steps A + A+)
  * ==========================================================================
  * Field-test verdict from the kids on v0.5.2: "it doesn't seem like a real
@@ -87,7 +109,8 @@
     throw new Error('flock.js: A-Frame must be loaded first');
   }
 
-  var VERSION = '0.6.0-dev';   // 0.6.0: flat panels + PBR + real lighting
+  var VERSION = '0.7.0-dev';   // 0.7.0: geom:'fold' authentic tsuru (opt-in)
+                               // 0.6.0: flat panels + PBR + real lighting
 
   /* ----- deterministic per-crane randomness --------------------------------
    * mulberry32 is a tiny seeded random generator. Seeding by crane index
@@ -284,6 +307,64 @@
     return gb.build();
   }
 
+  /* --------------------------------------------------------------------------
+   * FOLD GEOMETRY (geom:'fold') — the authentic tsuru
+   * --------------------------------------------------------------------------
+   * Reads the baked module (window.CRANE_FOLD from crane_fold_geometry.js) and
+   * returns a per-crane BufferGeometry PLUS the arrays tick() needs to flap it.
+   *
+   * WHY A COPY PER CRANE: each crane flaps on its own phase, so each needs its
+   * own position buffer to write into. uv/flapW/side are shared read-only.
+   *
+   * WHY NO CPU NORMALS PER FRAME: the paper material uses flatShading, which
+   * derives each facet's normal from screen-space derivatives of position in
+   * the shader. So when we move vertices, the hard creases re-light themselves
+   * for free — we never recompute normals on the CPU. (~5 lines, as promised.)
+   */
+  function buildFoldGeometry() {
+    var C = window.CRANE_FOLD;
+    if (!C) return null;
+    var g = new THREE.BufferGeometry();
+    var posAttr = new THREE.BufferAttribute(new Float32Array(C.position), 3);
+    g.setAttribute('position', posAttr);
+    g.setAttribute('uv',       new THREE.BufferAttribute(C.uv, 2));
+    // vertexColors:true is on in the material; give every vertex white so it
+    // multiplies to 1 (the baked crane carries no per-face shading — the real
+    // fold angles + key light do all the shading now).
+    var col = new Float32Array(C.position.length); col.fill(1);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();                          // once; flatShading wins
+    return { geo: g, posAttr: posAttr, pos: posAttr.array,
+             rest: new Float32Array(C.position),
+             flapW: C.flapW, side: C.side,
+             hingeX: C.hingeX, hingeY: C.hingeY };
+  }
+
+  /* Deform one fold-crane's vertices for a given wing angle (radians). Both
+   * wings rise/fall together; `side` (+1/-1) mirrors the rotation so it reads
+   * as a symmetric flap. Vertices with flapW 0 (body/neck/tail) never move, and
+   * vertices on the hinge line sit on the rotation axis, so the root never
+   * gaps. Called once per crane per frame — ~300 cheap rotations, negligible. */
+  function deformFoldWings(F, angle) {
+    var pos = F.pos, rest = F.rest, w = F.flapW, sd = F.side,
+        hx = F.hingeX, hy = F.hingeY, n = w.length, i, j;
+    for (i = 0; i < n; i++) {
+      j = i * 3;
+      var wi = w[i];
+      if (wi <= 0) {                                     // body: straight copy
+        pos[j] = rest[j]; pos[j + 1] = rest[j + 1]; pos[j + 2] = rest[j + 2];
+        continue;
+      }
+      var s = sd[i], px = s * hx;
+      var x = rest[j] - px, y = rest[j + 1] - hy;
+      var a = angle * wi * s, ca = Math.cos(a), sa = Math.sin(a);
+      pos[j]     = x * ca - y * sa + px;
+      pos[j + 1] = x * sa + y * ca + hy;
+      pos[j + 2] = rest[j + 2];
+    }
+    F.posAttr.needsUpdate = true;
+  }
+
   /* ==========================================================================
    * THE ENVIRONMENT MAP  — the single most important object in this file
    * ==========================================================================
@@ -427,6 +508,19 @@
       autoTarget:   { default: true },  // react to MindAR targetFound/Lost
       autoShow:     { default: false }, // fade in immediately (preview page)
 
+      /* GEOMETRY SOURCE (Phase 6 "authentic tsuru"):
+       *   'proc' (default) — the hand-built stylised crane with the 4-panel
+       *          articulated wing rig. Beloved, clean, ships today.
+       *   'fold'  — the EXACT folded mesh baked from Origami Simulator by
+       *          tools/generate_crane_from_fold.py (crane_fold_geometry.js
+       *          must be loaded before this file). Authentic silhouette and
+       *          real fold-angle creases; wings flap via soft per-vertex
+       *          skinning instead of the pivot rig. A/B with ?geom=fold until
+       *          the kids vote — then flip this default. Mat mode is untouched
+       *          either way (golden rule). Auto-falls back to 'proc' if the
+       *          baked module isn't present. */
+      geom:         { default: 'proc' },
+
       /* ----------------------- TUNABLES (v0.6.0) -------------------------
        * Everything that decides whether these read as PAPER lives here.
        * Change one at a time and take a screenshot from the same angle. */
@@ -562,10 +656,12 @@
         this.el.object3D.traverse(function (o) {
           if (o.isMesh) tris += o.geometry.getAttribute('position').count / 3;
         });
-        console.log('[sedge-flock ' + VERSION + '] cranes:', d.count,
+        var useFold = (d.geom === 'fold') && window.CRANE_FOLD;
+        console.log('[sedge-flock ' + VERSION + '] geom:',
+          useFold ? 'fold (authentic tsuru)' : 'proc', '| cranes:', d.count,
           '| triangles total:', tris, '(' + Math.round(tris / d.count) + '/crane)',
-          '| est. draw calls:', d.count * 6,
-          '| pbr:', d.pbr, '| jitter:', d.jitter, '| grain:', d.grain);
+          '| est. draw calls:', d.count * (useFold ? 2 : 6),
+          '| pbr:', d.pbr);
       }
     },
 
@@ -613,31 +709,48 @@
       craneRoot.scale.setScalar(scale);
       roll.add(craneRoot);
 
-      craneRoot.add(new THREE.Mesh(
-        buildBodyGeometry(rand, jit, d.grain, d.bakedAO), mat));
       // NOTE: the dark crease LineSegments that lived here in 0.5.x is gone.
       // The ridge, the neck fold and the wing folds are all real angle
       // changes in the geometry — the key light draws them, correctly, from
       // every viewpoint. That is what a crease actually is.
 
-      // wings: root pivot → inner panel → fold pivot → outer panel
-      var wings = [];
-      for (var side = 0; side < 2; side++) {
-        var rootPivot = new THREE.Group();
-        rootPivot.position.set(WING_ROOT_X, WING_ROOT_Y, 0);
-        if (side === 1) rootPivot.scale.x = -1;   // mirror = free left wing
-        rootPivot.position.x *= (side === 1 ? -1 : 1);
-        var inner = new THREE.Mesh(
-          buildInnerWing(rand, jit, d.grain, d.bakedAO), mat);
-        var foldPivot = new THREE.Group();
-        foldPivot.position.set(WING_INNER_LEN, -0.015, 0);
-        var outer = new THREE.Mesh(
-          buildOuterWing(rand, jit, d.grain, d.bakedAO), mat);
-        foldPivot.add(outer);
-        rootPivot.add(inner);
-        rootPivot.add(foldPivot);
-        craneRoot.add(rootPivot);
-        wings.push({ root: rootPivot, fold: foldPivot });
+      var wings = [];   // 4-panel rig ('proc'); stays empty for 'fold'
+      var fold = null;  // soft-skinned deform state ('fold'); null for 'proc'
+
+      var useFold = (d.geom === 'fold') && window.CRANE_FOLD;
+      if (d.geom === 'fold' && !window.CRANE_FOLD) {
+        console.warn('[sedge-flock] geom:"fold" requested but ' +
+          'crane_fold_geometry.js is not loaded — falling back to procedural. ' +
+          'Add <script src="js/crane_fold_geometry.js"> before flock.js.');
+      }
+
+      if (useFold) {
+        // ONE authentic mesh (body+neck+tail+wings). Wings flap by deforming
+        // this same buffer in tick() — no child pivots, so fewer draw calls.
+        fold = buildFoldGeometry();
+        craneRoot.add(new THREE.Mesh(fold.geo, mat));
+      } else {
+        // Procedural crane: body mesh + articulated wing rig.
+        craneRoot.add(new THREE.Mesh(
+          buildBodyGeometry(rand, jit, d.grain, d.bakedAO), mat));
+        // wings: root pivot → inner panel → fold pivot → outer panel
+        for (var side = 0; side < 2; side++) {
+          var rootPivot = new THREE.Group();
+          rootPivot.position.set(WING_ROOT_X, WING_ROOT_Y, 0);
+          if (side === 1) rootPivot.scale.x = -1;   // mirror = free left wing
+          rootPivot.position.x *= (side === 1 ? -1 : 1);
+          var inner = new THREE.Mesh(
+            buildInnerWing(rand, jit, d.grain, d.bakedAO), mat);
+          var foldPivot = new THREE.Group();
+          foldPivot.position.set(WING_INNER_LEN, -0.015, 0);
+          var outer = new THREE.Mesh(
+            buildOuterWing(rand, jit, d.grain, d.bakedAO), mat);
+          foldPivot.add(outer);
+          rootPivot.add(inner);
+          rootPivot.add(foldPivot);
+          craneRoot.add(rootPivot);
+          wings.push({ root: rootPivot, fold: foldPivot });
+        }
       }
 
       // blob shadow: child of the UNIT (not roll) so banking never tilts it
@@ -652,7 +765,8 @@
       this.formation.add(unit);
 
       this.cranes.push({
-        unit: unit, roll: roll, wings: wings, mat: mat, shadow: shadow,
+        unit: unit, roll: roll, wings: wings, fold: fold, mat: mat,
+        shadow: shadow,
         baseOffset: off.slice(),
         flapFreq: 3.1 * (0.85 + rand() * 0.30),   // ±15% (spec)
         flapPhase: rand() * Math.PI * 2,
@@ -732,14 +846,22 @@
         var targetW = c.gliding ? 0 : 1;
         c.flapWeight += (targetW - c.flapWeight) * Math.min(dt * 5, 1);
 
-        // -- two-segment flap: outer panel lags the inner -------------------
+        // -- flap ------------------------------------------------------------
         c.flapPhase += dt * c.flapFreq * Math.PI * 2 * (0.35 + 0.65 * c.flapWeight);
         var glideLift = (1 - c.flapWeight) * 0.30;           // wings held up
-        var innerRot = -(Math.sin(c.flapPhase) * 0.85 * c.flapWeight + glideLift);
-        var outerRot = -(Math.sin(c.flapPhase - 0.45) * 0.65 * c.flapWeight);
-        for (var w = 0; w < 2; w++) {
-          c.wings[w].root.rotation.z = innerRot;
-          c.wings[w].fold.rotation.z = outerRot;
+        if (c.fold) {
+          // 'fold' geometry: soft-skin both wings up/down about the root hinge.
+          // sin drives the beat; glideLift keeps them raised during a glide.
+          var ang = Math.sin(c.flapPhase) * 0.80 * c.flapWeight + glideLift;
+          deformFoldWings(c.fold, ang);
+        } else {
+          // 'proc' geometry: two-segment pivot flap, outer lagging the inner.
+          var innerRot = -(Math.sin(c.flapPhase) * 0.85 * c.flapWeight + glideLift);
+          var outerRot = -(Math.sin(c.flapPhase - 0.45) * 0.65 * c.flapWeight);
+          for (var w = 0; w < 2; w++) {
+            c.wings[w].root.rotation.z = innerRot;
+            c.wings[w].fold.rotation.z = outerRot;
+          }
         }
 
         // -- bob (±2 cm, spec) + flutter noise ------------------------------
