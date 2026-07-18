@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sedge of Cranes</title>
-  <link rel="stylesheet" href="css/style.css?v=0.6.0" />
+  <link rel="stylesheet" href="css/style.css?v=0.7.0" />
   <!--
     NOTE (Phase 4): the AR libraries (A-Frame 1.5.0 + MindAR 1.2.5, ~1.5 MB)
     are now LAZY-LOADED by js/app.js when the user taps Start. The landing
@@ -81,8 +81,10 @@
              a sheet is a big part of why real cranes glow. This fakes it. -->
         <a-entity light="type: directional; color: #ffdcb4; intensity: 0.35" position="-0.5 -0.3 -0.8"></a-entity>
         <a-entity id="mat-anchor" mindar-image-target="targetIndex: 0">
-          <!--<a-entity flock></a-entity>-->
-          <a-entity id="flock" sedge-flock></a-entity>          
+          <!-- v0.7.0: kids approved the authentic tsuru (Phase 6 "wow" test),
+               so the mat scene now uses geom:fold. Image tracking is unchanged.
+               To revert instantly, set this back to just `sedge-flock`. -->
+          <a-entity id="flock" sedge-flock="geom: fold"></a-entity>          
         </a-entity>
       </a-scene>
     </template>
@@ -100,7 +102,7 @@
     <button id="btn-subs" class="chip"></button>
   </div>
 
-  <script src="js/strings.js?v=0.6.0"></script>
-  <script src="js/app.js?v=0.6.0"></script>
+  <script src="js/strings.js?v=0.7.0"></script>
+  <script src="js/app.js?v=0.7.0"></script>
 </body>
 </html>
