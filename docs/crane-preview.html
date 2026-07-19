@@ -22,6 +22,10 @@
        geom:'fold' path can find window.CRANE_FOLD -->
   <script src="js/crane_fold_geometry.js?v=0.7.0"></script>
   <script src="js/flock.js?v=0.7.0"></script>
+  <!-- walking origami cardinal (preview-only character). Geometry module must
+       load before cardinal.js so the component finds window.CARDINAL_FOLD. -->
+  <script src="js/cardinal_fold_geometry.js?v=0.1.0"></script>
+  <script src="js/cardinal.js?v=0.1.0"></script>
   <style>
     :root {
       --paper: #fdf9f0;
@@ -77,7 +81,8 @@
     <small id="stamp">Phase 6 · drag to look around</small>
     <br><small>geometry:
       <a href="?geom=proc">procedural</a> ·
-      <a href="?geom=fold">authentic fold</a></small>
+      <a href="?geom=fold">authentic fold</a> ·
+      <a href="?geom=cardinal">🐦 cardinal</a></small>
   </div>
 
   <div id="hud">loading…</div>
@@ -87,6 +92,7 @@
     <button data-beat="wobble">Beat 1 · wobble</button>
     <button data-beat="loop">Beat 2 · loop</button>
     <button data-beat="finale">Beat 3 · circle</button>
+    <button id="btn-peck" hidden>🐦 Peck</button>
   </div>
 
   <a-scene
@@ -115,12 +121,16 @@
          BEFORE the component initialises (it reads geom only at init). -->
     <script>
       (function () {
-        var m = /[?&]geom=(fold|proc)/.exec(location.search);
+        var m = /[?&]geom=(fold|proc|cardinal)/.exec(location.search);
         var geom = m ? m[1] : 'proc';
         var e = document.createElement('a-entity');
-        e.id = 'flock';
-        e.setAttribute('sedge-flock',
-          'autoShow: true; autoTarget: false; geom: ' + geom);
+        e.id = 'flock';   // keep the id so the Freeze button + HUD wiring works
+        if (geom === 'cardinal') {
+          e.setAttribute('walking-cardinal', 'autoShow: true');
+        } else {
+          e.setAttribute('sedge-flock',
+            'autoShow: true; autoTarget: false; geom: ' + geom);
+        }
         document.currentScript.parentNode.appendChild(e);
         window.__geom = geom;
       })();
@@ -143,11 +153,26 @@
   <script>
     (function () {
       'use strict';
+      var geom = window.__geom || 'proc';
+      var ver = geom === 'cardinal'
+        ? (window.CARDINAL_VERSION || '?')
+        : (window.SEDGE_FLOCK_VERSION || '?');
       document.getElementById('stamp').textContent =
-        'v' + (window.SEDGE_FLOCK_VERSION || '?') +
-        ' · geom: ' + (window.__geom || 'proc') + ' · drag to look around';
+        'v' + ver + ' · ' +
+        (geom === 'cardinal' ? 'cardinal · walking' : 'geom: ' + geom) +
+        ' · drag to look around';
 
       var flock = document.getElementById('flock');
+
+      // Cardinal mode: the three crane story-beats don't apply — hide them and
+      // offer a Peck button instead. Freeze still works (the cardinal listens
+      // to the same flock-freeze/flock-resume events).
+      if (geom === 'cardinal') {
+        document.querySelectorAll('[data-beat]').forEach(function (b) { b.hidden = true; });
+        var peck = document.getElementById('btn-peck');
+        peck.hidden = false;
+        peck.addEventListener('click', function () { flock.emit('cardinal-peck'); });
+      }
 
       // beat buttons
       document.querySelectorAll('[data-beat]').forEach(function (b) {
