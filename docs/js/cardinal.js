@@ -9,7 +9,8 @@
  * tools/generate_cardinal_from_fold.py into window.CARDINAL_FOLD. This file
  * turns those numbers into a paper-shaded mesh and makes it WALK: the two
  * short legs swing fore-aft in opposite phase while the body bobs, waddles
- * (rolls) and pitches, and the whole bird strolls along a slow circle.
+ * (rolls) and pitches, and the whole bird wanders forward, exploring the
+ * ground in short bursts with pauses, glances and the odd peck.
  *
  * It reuses the exact paper look developed for the cranes in flock.js —
  * MeshStandardMaterial (metalness 0, roughness 0.62), flatShading so every
@@ -26,7 +27,7 @@
   'use strict';
   if (typeof AFRAME === 'undefined') { console.error('[cardinal] needs A-Frame'); return; }
   var THREE = AFRAME.THREE;
-  window.CARDINAL_VERSION = '0.1.0-dev';
+  window.CARDINAL_VERSION = '0.2.0-dev';
 
   // ---- small helpers, ported from flock.js so the paper matches ------------
 
@@ -107,7 +108,7 @@
     schema: {
       size:         { default: 0.16 },   // world metres, tail-to-beak length
       speed:        { default: 1.0 },    // overall gait/stroll speed multiplier
-      pathRadius:   { default: 0.16 },   // radius of the stroll circle (m)
+      pathRadius:   { default: 0.18 },   // wander bounds: stay within this radius (m)
       swing:        { default: 0.6 },    // leg swing amplitude (radians)
       autoShow:     { default: true },
       pbr:          { default: true },
@@ -138,7 +139,7 @@
       var env = d.pbr ? buildEnvironment(renderer) : null;
       if (env) this.mat.envMap = env;
 
-      // --- rig: root(stroll) -> body(bob/roll/pitch) -> mesh ----------------
+      // --- rig: root(wander) -> body(bob/roll/pitch) -> mesh ---------------
       this.root = new THREE.Group();
       this.body = new THREE.Group();
       this.mesh = new THREE.Mesh(geo, this.mat);
@@ -157,10 +158,19 @@
       this.el.setObject3D('cardinal', this.root);
 
       // --- state ------------------------------------------------------------
-      this.phase = 0; this.frozen = false; this.shown = false;
+      this.frozen = false; this.shown = false;
       this.fade = 0; this.peck = 0;
       this.targetOpacity = d.autoShow ? 1 : 0;
       if (d.autoShow) this.shown = true;
+      // wander state: a heading it walks along, a ground position, a gait phase
+      // that only advances while actually walking, and a walk/pause timer so it
+      // explores in bursts like a real bird.
+      this.heading = Math.random() * Math.PI * 2;
+      this.targetHeading = this.heading;
+      this.px = 0; this.pz = 0;
+      this.stride = 0;
+      this.mode = 'walk';
+      this.modeT = 1.2 + Math.random() * 2.0;
 
       // --- events (mirror the flock so the preview Freeze button works) -----
       var pause  = function () { self.frozen = true; };
@@ -185,30 +195,71 @@
       this.shadow.material.opacity = this.fade * 0.9;
 
       if (this.frozen) return;
-      this.phase += s * d.speed;
 
-      // ---- stroll along a slow circle, facing the tangent ------------------
-      var a = this.phase * 0.5;                     // how fast we go around
-      var R = d.pathRadius;
-      this.root.position.set(Math.cos(a) * R, 0, Math.sin(a) * R);
-      // +X of the mesh is the beak; face the direction of travel (tangent)
-      this.root.rotation.y = -a + Math.PI / 2;
+      // ---- wander: walk forward in bursts, pause to look/peck, turn -------
+      // A real bird explores: a few steps, a stop, a glance, maybe a peck,
+      // then off in a slightly new direction — not a tidy circle.
+      var STRIDE_FREQ = 3.2, WALK_SPEED = 0.085, TURN_RATE = 1.8;
+      var BOUND = d.pathRadius;                 // keep it within camera view
 
-      // ---- gait: two steps per stride --------------------------------------
-      var step = this.phase * 3.2;                  // stride frequency
-      // body bob (2x per stride: up on each footfall)
-      this.body.position.y = 0.018 * Math.abs(Math.sin(step)) * d.size / 0.16;
-      // waddle: roll side to side, once per stride
-      this.body.rotation.z = 0.10 * Math.sin(step);
-      // subtle pitch bob + a peck dip if requested
+      this.modeT -= s;
+      if (this.modeT <= 0) {
+        if (this.mode === 'walk') {             // stop to look around / peck
+          this.mode = 'pause';
+          this.modeT = 0.5 + Math.random() * 1.3;
+          this.targetHeading = this.heading + (Math.random() - 0.5) * 2.4;
+          if (Math.random() < 0.55) this.peck = 1;
+        } else {                                // set off in a new-ish heading
+          this.mode = 'walk';
+          this.modeT = 1.0 + Math.random() * 2.4;
+          this.targetHeading = this.heading + (Math.random() - 0.5) * 1.2;
+        }
+      }
+
+      // if near the edge of the play area, aim back toward the centre
+      if (Math.hypot(this.px, this.pz) > BOUND) {
+        this.targetHeading = Math.atan2(-this.pz, -this.px);
+        this.mode = 'walk';
+      }
+
+      // steer smoothly toward the target heading (+ a little wander jitter)
+      var dh = this.targetHeading - this.heading;
+      while (dh >  Math.PI) dh -= 2 * Math.PI;
+      while (dh < -Math.PI) dh += 2 * Math.PI;
+      var maxTurn = TURN_RATE * s;
+      this.heading += Math.max(-maxTurn, Math.min(maxTurn, dh));
+      this.heading += (Math.random() - 0.5) * 0.03;
+
+      var walking = (this.mode === 'walk');
+      if (walking) {
+        this.stride += s * d.speed * STRIDE_FREQ;
+        // forward speed pulses with each step (push, then glide)
+        var pulse = 0.55 + 0.45 * Math.max(0, Math.sin(this.stride));
+        var v = WALK_SPEED * d.speed * pulse;
+        this.px += Math.cos(this.heading) * v * s;
+        this.pz += Math.sin(this.heading) * v * s;
+      }
+
+      // place on the ground and FACE the direction of travel.
+      // mesh +X is the beak; Ry(-heading) sends +X to (cos h, 0, sin h) = the
+      // forward vector we just moved along. (The old code faced the opposite
+      // way — that was the "walking backwards" bug.)
+      this.root.position.set(this.px, 0, this.pz);
+      this.root.rotation.y = -this.heading;
+
+      // ---- gait: body bob / waddle / pitch (still only while walking) -------
+      var step = this.stride;
+      var gait = walking ? 1 : 0;
+      this.body.position.y = 0.018 * Math.abs(Math.sin(step)) * (d.size / 0.16) * gait;
+      this.body.rotation.z = 0.10 * Math.sin(step) * gait;      // waddle roll
       if (this.peck > 0) this.peck = Math.max(0, this.peck - s * 2.5);
-      this.body.rotation.x = 0.04 * Math.sin(step * 2) + this.peck * 0.5;
+      this.body.rotation.x = 0.04 * Math.sin(step * 2) * gait + this.peck * 0.5;
 
-      // ---- legs: swing fore-aft in opposite phase, lift at the top ---------
-      var aL = d.swing * Math.sin(step);
-      var aR = d.swing * Math.sin(step + Math.PI);
-      var liftL = Math.max(0, Math.sin(step)) * 0.05;   // raise the swinging foot
-      var liftR = Math.max(0, Math.sin(step + Math.PI)) * 0.05;
+      // ---- legs: swing fore-aft, opposite phase; planted when paused -------
+      var aL = walking ? d.swing * Math.sin(step) : 0;
+      var aR = walking ? d.swing * Math.sin(step + Math.PI) : 0;
+      var liftL = walking ? Math.max(0, Math.sin(step)) * 0.05 : 0;
+      var liftR = walking ? Math.max(0, Math.sin(step + Math.PI)) * 0.05 : 0;
       var pos = this.pos.array, rest = this.rest, W = this.legW, side = this.side;
       var hipL = this.hipL, hipR = this.hipR;
       for (var i = 0; i < W.length; i++) {
