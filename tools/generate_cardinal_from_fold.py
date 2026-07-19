@@ -35,10 +35,10 @@ LEG_RADIUS = 0.22   # xz radius (baked units) around a foot that counts as its l
 # reading the printout the first run gives you). Format: (xmin,xmax,ymin,ymax).
 # -----------------------------------------------------------------------------
 
-RED    = (0.70, 0.13, 0.11)   # cardinal body red
-CREST  = (0.60, 0.09, 0.09)   # crest: a touch deeper
-MASK   = (0.12, 0.09, 0.10)   # black face mask
-BEAK   = (0.85, 0.45, 0.12)   # orange beak
+RED    = (0.88, 0.08, 0.05)   # intense cardinal scarlet (ref photo)
+CREST  = (0.80, 0.07, 0.05)   # crest: same vivid red, a hair deeper
+MASK   = (0.06, 0.05, 0.06)   # black face mask + throat bib
+BEAK   = (0.92, 0.42, 0.10)   # orange beak
 
 def smoothstep(t):
     t = np.clip(t, 0, 1); return t*t*(3-2*t)
@@ -96,13 +96,15 @@ def main():
     ymax = V[:,1].max()
     col = np.tile(np.array(RED), (len(V),1))
     for i in range(len(V)):
-        x,y,z = V[i]
-        if y > 0.85*ymax:                                  # crest, up top
-            col[i] = CREST
-        if x > 0.68*xmax and 0.66*ymax < y <= 0.85*ymax:   # black face mask
-            col[i] = MASK
-        if x > 0.90*xmax and 0.52*ymax < y <= 0.68*ymax:   # orange beak, forward-most
-            col[i] = BEAK
+        xf, yf = V[i,0]/xmax, V[i,1]/ymax
+        c = RED
+        if yf > 0.85:                                          # crest, up top
+            c = CREST
+        elif (xf > 0.58 and 0.60 < yf < 0.85) or (xf > 0.65 and yf < 0.40):
+            c = MASK                                           # cheek mask + throat bib
+        if xf > 0.90 and 0.50 < yf < 0.85:                     # orange beak tip
+            c = BEAK
+        col[i] = c
     print(f"  colour: {(np.all(col==MASK,1)).sum()} mask, "
           f"{(np.all(col==BEAK,1)).sum()} beak, "
           f"{(np.all(col==CREST,1)).sum()} crest verts")
